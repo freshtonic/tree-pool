@@ -69,13 +69,16 @@ pub fn default_branch(repo_root: &Path) -> Result<String> {
 }
 
 pub fn remote_url(repo_root: &Path) -> Result<Option<String>> {
-    // Check if origin remote exists
-    let remotes = run_git(repo_root, &["remote"])?;
-    if !remotes.lines().any(|r| r == "origin") {
+    if !has_origin(repo_root)? {
         return Ok(None);
     }
     let url = run_git(repo_root, &["remote", "get-url", "origin"])?;
     Ok(Some(url))
+}
+
+pub fn has_origin(repo_root: &Path) -> Result<bool> {
+    let remotes = run_git(repo_root, &["remote"])?;
+    Ok(remotes.lines().any(|r| r == "origin"))
 }
 
 pub fn fetch_origin(repo_root: &Path) -> Result<()> {

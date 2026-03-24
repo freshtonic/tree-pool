@@ -63,9 +63,11 @@ fn cmd_get() -> anyhow::Result<()> {
     let wt_path = if let Some(wt) = available {
         let wt_path = wt.path.clone();
         // Reset to latest default branch
-        eprintln!("fetching origin...");
-        if let Err(e) = git::fetch_origin(&repo_root_path) {
-            eprintln!("warning: failed to fetch origin: {e}");
+        if git::has_origin(&repo_root_path)? {
+            eprintln!("fetching origin...");
+            if let Err(e) = git::fetch_origin(&repo_root_path) {
+                eprintln!("warning: failed to fetch origin: {e}");
+            }
         }
         let branch = git::default_branch(&repo_root_path)?;
         let ref_name = git::branch_ref(&repo_root_path, &branch)?;
@@ -74,9 +76,11 @@ fn cmd_get() -> anyhow::Result<()> {
         wt_path
     } else if st.worktrees.len() < config.max_trees {
         // Create a new worktree
-        eprintln!("fetching origin...");
-        if let Err(e) = git::fetch_origin(&repo_root_path) {
-            eprintln!("warning: failed to fetch origin: {e}");
+        if git::has_origin(&repo_root_path)? {
+            eprintln!("fetching origin...");
+            if let Err(e) = git::fetch_origin(&repo_root_path) {
+                eprintln!("warning: failed to fetch origin: {e}");
+            }
         }
         let branch = git::default_branch(&repo_root_path)?;
         let ref_name = git::branch_ref(&repo_root_path, &branch)?;
