@@ -146,6 +146,20 @@ pub fn reset_worktree(worktree_path: &Path, ref_name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Create a worktree with a new branch.
+pub fn worktree_add_new_branch(repo_root: &Path, worktree_path: &Path, branch: &str) -> Result<()> {
+    let path_str = worktree_path.to_str().context("invalid worktree path")?;
+    run_git(repo_root, &["worktree", "add", "-b", branch, path_str])?;
+    Ok(())
+}
+
+/// Create a worktree checking out an existing branch.
+pub fn worktree_add_existing_branch(repo_root: &Path, worktree_path: &Path, branch: &str) -> Result<()> {
+    let path_str = worktree_path.to_str().context("invalid worktree path")?;
+    run_git(repo_root, &["worktree", "add", path_str, branch])?;
+    Ok(())
+}
+
 /// Check if a branch exists locally or on a remote.
 pub fn branch_exists(repo_root: &Path, branch: &str) -> Result<bool> {
     let local = format!("refs/heads/{branch}");
@@ -318,6 +332,41 @@ mod tests {
         let dir = setup_test_repo();
         let branch = current_branch(dir.path()).unwrap();
         assert!(branch.is_some());
+    }
+
+    #[test]
+    fn test_worktree_add_new_branch() {
+        let dir = setup_test_repo();
+        let wt_dir = tempfile::tempdir().unwrap();
+        let wt_path = wt_dir.path().join("wt");
+        worktree_add_new_branch(dir.path(), &wt_path, "feature/test").unwrap();
+        assert!(wt_path.exists());
+        let branch = current_branch(&wt_path).unwrap();
+        assert_eq!(branch, Some("feature/test".to_string()));
+    }
+
+    #[test]
+    fn test_worktree_add_existing_branch() {
+        let dir = setup_test_repo();
+        // Create a branch first
+        Command::new("git")
+            .args(["branch", "existing-branch"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        // Detach HEAD so the branch is free
+        Command::new("git")
+            .args(["checkout", "--detach"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+
+        let wt_dir = tempfile::tempdir().unwrap();
+        let wt_path = wt_dir.path().join("wt");
+        worktree_add_existing_branch(dir.path(), &wt_path, "existing-branch").unwrap();
+        assert!(wt_path.exists());
+        let branch = current_branch(&wt_path).unwrap();
+        assert_eq!(branch, Some("existing-branch".to_string()));
     }
 
     #[test]
