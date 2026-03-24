@@ -11,6 +11,7 @@ mod process;
 mod prompt;
 #[allow(dead_code)] // Functions will be used by future modules.
 mod gitignore;
+mod display;
 #[allow(dead_code)] // Functions will be used by future modules.
 mod shell;
 #[allow(dead_code)] // Functions will be used by future modules.
@@ -44,7 +45,55 @@ fn cmd_get() -> anyhow::Result<()> {
 }
 
 fn cmd_status() -> anyhow::Result<()> {
-    todo!()
+    let cwd = std::env::current_dir()?;
+    let root = git::repo_root(&cwd)?;
+    let repo_root = Path::new(&root);
+    let config = config::Config::load(repo_root)?;
+    let pool_dir = pool::resolve_pool_dir(repo_root, &config)?;
+
+    let _lock = state::State::lock(&pool_dir)?;
+    let state = state::State::load(&pool_dir)?;
+
+    if state.worktrees.is_empty() {
+        eprintln!("no worktrees in pool");
+        return Ok(());
+    }
+
+    use colored::Colorize;
+
+    for wt in &state.worktrees {
+        let procs = process::processes_in_dir(&wt.path);
+        let dirty = git::is_dirty(&wt.path).unwrap_or(false);
+        let current = display::is_current_dir(&wt.path);
+
+        let (status_str, status_colored) = if current {
+            ("here", "here".cyan().bold().to_string())
+        } else if !procs.is_empty() {
+            ("in-use", "in-use".red().to_string())
+        } else if dirty {
+            ("dirty", "dirty".yellow().to_string())
+        } else {
+            ("available", "available".green().to_string())
+        };
+
+        let _ = status_str; // suppress unused warning
+        println!(
+            "{:>4}  {:<11}  {}",
+            wt.name,
+            status_colored,
+            display::pretty_path(&wt.path)
+        );
+
+        if !procs.is_empty() && !current {
+            let proc_list: Vec<String> = procs
+                .iter()
+                .map(|p| format!("{} ({})", p.name, p.pid))
+                .collect();
+            println!("        {}", proc_list.join(", "));
+        }
+    }
+
+    Ok(())
 }
 
 fn cmd_return(_path: Option<String>, _force: bool) -> anyhow::Result<()> {
