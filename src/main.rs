@@ -3,6 +3,8 @@ mod cli;
 mod config;
 #[allow(dead_code)] // Functions will be used by future modules.
 mod git;
+#[allow(dead_code)] // Functions will be used by future modules.
+mod state;
 
 use clap::Parser;
 use cli::{Cli, Command};
