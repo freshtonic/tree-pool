@@ -72,6 +72,16 @@ fn cmd_get(branch: Option<String>) -> anyhow::Result<()> {
     let _lock = state::State::lock(&pool_dir)?;
     let mut st = state::State::load(&pool_dir)?;
 
+    // Re-validate after acquiring lock to avoid TOCTOU race
+    if !is_new {
+        let checked_out = git::checked_out_branches(&repo_root_path)?;
+        if checked_out.contains(&selected_branch) {
+            anyhow::bail!(
+                "branch '{selected_branch}' is already checked out in another worktree"
+            );
+        }
+    }
+
     // Try to find an available worktree (not in-use and not dirty)
     let available = st
         .worktrees
@@ -80,11 +90,11 @@ fn cmd_get(branch: Option<String>) -> anyhow::Result<()> {
 
     let wt_path = if let Some(wt) = available {
         let wt_path = wt.path.clone();
+        let default = git::default_branch(&repo_root_path)?;
+        let ref_name = git::branch_ref(&repo_root_path, &default)?;
+        git::reset_worktree(&wt_path, &ref_name)?;
         if is_new {
-            // Create a new branch at the worktree's current HEAD, then switch
-            let default = git::default_branch(&repo_root_path)?;
-            let ref_name = git::branch_ref(&repo_root_path, &default)?;
-            git::reset_worktree(&wt_path, &ref_name)?;
+            // Reset to default branch, then create the new branch from there
             git::create_and_checkout_branch(&wt_path, &selected_branch)?;
         } else {
             git::checkout_branch(&wt_path, &selected_branch)?;
@@ -127,18 +137,15 @@ fn cmd_get(branch: Option<String>) -> anyhow::Result<()> {
     let default = git::default_branch(&repo_root_path)?;
     let ref_name = git::branch_ref(&repo_root_path, &default)?;
 
-    if git::is_dirty(&wt_path).unwrap_or(false) {
-        if prompt::confirm("worktree has uncommitted changes. return it anyway?", false)
+    let should_reset = if git::is_dirty(&wt_path).unwrap_or(false) {
+        prompt::confirm("worktree has uncommitted changes. return it anyway?", false)
             .unwrap_or(true)
-        {
-            if let Err(e) = git::reset_worktree(&wt_path, &ref_name) {
-                eprintln!("warning: failed to reset worktree: {e}");
-            }
-        }
     } else {
-        if let Err(e) = git::reset_worktree(&wt_path, &ref_name) {
-            eprintln!("warning: failed to reset worktree: {e}");
-        }
+        true
+    };
+
+    if should_reset && let Err(e) = git::reset_worktree(&wt_path, &ref_name) {
+        eprintln!("warning: failed to reset worktree: {e}");
     }
 
     std::process::exit(exit_code);
