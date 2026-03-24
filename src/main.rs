@@ -17,8 +17,9 @@ mod shell;
 #[allow(dead_code)] // Functions will be used by future modules.
 mod state;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
+use anyhow::Context;
 use clap::Parser;
 use cli::{Cli, Command};
 
@@ -41,7 +42,95 @@ fn main() {
 }
 
 fn cmd_get() -> anyhow::Result<()> {
-    todo!()
+    let cwd = std::env::current_dir()?;
+    let root = git::repo_root(&cwd)?;
+    let repo_root_path = PathBuf::from(&root);
+    let config = config::Config::load(&repo_root_path)?;
+    let pool_dir = pool::resolve_pool_dir(&repo_root_path, &config)?;
+
+    let repo_name = repo_root_path
+        .file_name()
+        .context("repo root has no name")?
+        .to_string_lossy()
+        .to_string();
+
+    // Ensure .gitignore covers the pool dir
+    if let Err(e) = gitignore::ensure_ignored(&pool_dir) {
+        eprintln!("warning: failed to update .gitignore: {e}");
+    }
+
+    let _lock = state::State::lock(&pool_dir)?;
+    let mut st = state::State::load(&pool_dir)?;
+
+    // Try to find an available worktree (not in-use and not dirty)
+    let available = st.worktrees.iter().find(|wt| {
+        !process::is_in_use(&wt.path) && !git::is_dirty(&wt.path).unwrap_or(true)
+    });
+
+    let wt_path = if let Some(wt) = available {
+        let wt_path = wt.path.clone();
+        // Reset to latest default branch
+        eprintln!("fetching origin...");
+        git::fetch_origin(&repo_root_path)?;
+        let branch = git::default_branch(&repo_root_path)?;
+        let ref_name = git::branch_ref(&repo_root_path, &branch)?;
+        git::reset_worktree(&wt_path, &ref_name)?;
+        eprintln!("reusing worktree: {}", display::pretty_path(&wt_path));
+        wt_path
+    } else if st.worktrees.len() < config.max_trees {
+        // Create a new worktree
+        eprintln!("fetching origin...");
+        git::fetch_origin(&repo_root_path)?;
+        let branch = git::default_branch(&repo_root_path)?;
+        let ref_name = git::branch_ref(&repo_root_path, &branch)?;
+
+        let name = st.next_name();
+        let wt_path = pool::worktree_path(&pool_dir, &name, &repo_name);
+
+        // Create parent dir
+        if let Some(parent) = wt_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        git::worktree_add(&repo_root_path, &wt_path, &ref_name)?;
+        st.add(name, wt_path.clone());
+        st.save(&pool_dir)?;
+        eprintln!("created worktree: {}", display::pretty_path(&wt_path));
+        wt_path
+    } else {
+        anyhow::bail!(
+            "all {} worktrees are in use or dirty — run `tp status` to see details, \
+             `tp return` to return a dirty worktree, or increase max_trees in tree-pool.toml",
+            config.max_trees
+        );
+    };
+
+    // Drop the lock before spawning the subshell
+    drop(_lock);
+
+    let exit_code = shell::spawn_subshell(&wt_path)?;
+
+    // On exit, check if dirty and prompt
+    if git::is_dirty(&wt_path).unwrap_or(false) {
+        if prompt::confirm("worktree has uncommitted changes. return it anyway?", true)
+            .unwrap_or(true)
+        {
+            let branch = git::default_branch(&repo_root_path)?;
+            let ref_name = git::branch_ref(&repo_root_path, &branch)?;
+            if let Err(e) = git::reset_worktree(&wt_path, &ref_name) {
+                eprintln!("warning: failed to reset worktree: {e}");
+            }
+        }
+    } else {
+        // Clean exit — release the worktree
+        let branch = git::default_branch(&repo_root_path)?;
+        let ref_name = git::branch_ref(&repo_root_path, &branch)?;
+        if let Err(e) = git::reset_worktree(&wt_path, &ref_name) {
+            eprintln!("warning: failed to reset worktree: {e}");
+        }
+    }
+
+    std::process::exit(exit_code);
 }
 
 fn cmd_status() -> anyhow::Result<()> {
