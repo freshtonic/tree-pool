@@ -210,10 +210,10 @@ fn cmd_return(path: Option<String>, force: bool) -> anyhow::Result<()> {
     }
 
     // Check dirty
-    if git::is_dirty(&wt_path)? && !force {
-        if !prompt::confirm("worktree has uncommitted changes. return it anyway?", true)? {
-            return Ok(());
-        }
+    if git::is_dirty(&wt_path)? && !force
+        && !prompt::confirm("worktree has uncommitted changes. return it anyway?", true)?
+    {
+        return Ok(());
     }
 
     // Reset to clean state
