@@ -4,6 +4,8 @@ mod config;
 #[allow(dead_code)] // Functions will be used by future modules.
 mod git;
 #[allow(dead_code)] // Functions will be used by future modules.
+mod pool;
+#[allow(dead_code)] // Functions will be used by future modules.
 mod process;
 #[allow(dead_code)] // Functions will be used by future modules.
 mod state;
