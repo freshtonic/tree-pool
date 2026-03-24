@@ -11,13 +11,14 @@ cargo install tree-pool
 ## Usage
 
 ```bash
-tp              # Acquire a worktree and open a subshell (alias for `tp get`)
-tp get          # Same as above
-tp status       # Show pool status
-tp return       # Return a worktree to the pool
-tp destroy      # Remove a worktree permanently
-tp init         # Create tree-pool.toml in repo root
-tp update       # Update tree-pool via cargo install
+tp                    # Acquire a worktree (prompts for branch)
+tp get                # Same as above
+tp get <branch>       # Acquire a worktree on a specific branch
+tp status             # Show pool status (includes branch names)
+tp return             # Return a worktree to the pool
+tp destroy            # Remove a worktree permanently
+tp init               # Create tree-pool.toml in repo root
+tp update             # Update tree-pool via cargo install
 ```
 
 ## Configuration
