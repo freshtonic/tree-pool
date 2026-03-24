@@ -154,7 +154,11 @@ pub fn worktree_add_new_branch(repo_root: &Path, worktree_path: &Path, branch: &
 }
 
 /// Create a worktree checking out an existing branch.
-pub fn worktree_add_existing_branch(repo_root: &Path, worktree_path: &Path, branch: &str) -> Result<()> {
+pub fn worktree_add_existing_branch(
+    repo_root: &Path,
+    worktree_path: &Path,
+    branch: &str,
+) -> Result<()> {
     let path_str = worktree_path.to_str().context("invalid worktree path")?;
     run_git(repo_root, &["worktree", "add", path_str, branch])?;
     Ok(())

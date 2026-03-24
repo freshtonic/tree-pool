@@ -35,7 +35,7 @@ fn main() {
     }
 }
 
-fn cmd_get(branch: Option<String>) -> anyhow::Result<()> {
+fn cmd_get(_branch: Option<String>) -> anyhow::Result<()> {
     let cwd = std::env::current_dir()?;
     let root = git::repo_root(&cwd)?;
     let repo_root_path = PathBuf::from(&root);
