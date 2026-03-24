@@ -1,5 +1,7 @@
 mod cli;
 #[allow(dead_code)] // Functions will be used by future modules.
+mod config;
+#[allow(dead_code)] // Functions will be used by future modules.
 mod git;
 
 use clap::Parser;
