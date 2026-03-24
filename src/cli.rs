@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 #[derive(Debug, Parser)]
 #[command(
     name = "tp",
-    version,
+    version = concat!("tree-pool ", env!("CARGO_PKG_VERSION")),
     about = "Manage a pool of reusable git worktrees"
 )]
 #[command(disable_help_subcommand = true)]

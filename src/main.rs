@@ -1,17 +1,17 @@
 mod cli;
 #[allow(dead_code)] // Functions will be used by future modules.
 mod config;
+mod display;
 #[allow(dead_code)] // Functions will be used by future modules.
 mod git;
+#[allow(dead_code)] // Functions will be used by future modules.
+mod gitignore;
 #[allow(dead_code)] // Functions will be used by future modules.
 mod pool;
 #[allow(dead_code)] // Functions will be used by future modules.
 mod process;
 #[allow(dead_code)] // Functions will be used by future modules.
 mod prompt;
-#[allow(dead_code)] // Functions will be used by future modules.
-mod gitignore;
-mod display;
 #[allow(dead_code)] // Functions will be used by future modules.
 mod shell;
 #[allow(dead_code)] // Functions will be used by future modules.
@@ -63,9 +63,10 @@ fn cmd_get() -> anyhow::Result<()> {
     let mut st = state::State::load(&pool_dir)?;
 
     // Try to find an available worktree (not in-use and not dirty)
-    let available = st.worktrees.iter().find(|wt| {
-        !process::is_in_use(&wt.path) && !git::is_dirty(&wt.path).unwrap_or(true)
-    });
+    let available = st
+        .worktrees
+        .iter()
+        .find(|wt| !process::is_in_use(&wt.path) && !git::is_dirty(&wt.path).unwrap_or(true));
 
     let wt_path = if let Some(wt) = available {
         let wt_path = wt.path.clone();
@@ -210,7 +211,8 @@ fn cmd_return(path: Option<String>, force: bool) -> anyhow::Result<()> {
     }
 
     // Check dirty
-    if git::is_dirty(&wt_path)? && !force
+    if git::is_dirty(&wt_path)?
+        && !force
         && !prompt::confirm("worktree has uncommitted changes. return it anyway?", true)?
     {
         return Ok(());

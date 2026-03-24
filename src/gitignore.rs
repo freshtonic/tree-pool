@@ -44,9 +44,7 @@ pub fn ensure_ignored(pool_dir: &Path) -> Result<()> {
                 break;
             }
         }
-        let mut canonical = existing
-            .canonicalize()
-            .unwrap_or_else(|_| existing.clone());
+        let mut canonical = existing.canonicalize().unwrap_or_else(|_| existing.clone());
         for part in suffix_parts.into_iter().rev() {
             canonical.push(part);
         }
