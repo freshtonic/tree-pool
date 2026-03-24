@@ -16,6 +16,8 @@ mod shell;
 #[allow(dead_code)] // Functions will be used by future modules.
 mod state;
 
+use std::path::Path;
+
 use clap::Parser;
 use cli::{Cli, Command};
 
@@ -54,7 +56,18 @@ fn cmd_destroy(_path: Option<String>, _force: bool, _all: bool) -> anyhow::Resul
 }
 
 fn cmd_init() -> anyhow::Result<()> {
-    todo!()
+    let cwd = std::env::current_dir()?;
+    let root = git::repo_root(&cwd)?;
+    let config_path = Path::new(&root).join("tree-pool.toml");
+
+    if config_path.exists() {
+        anyhow::bail!("tree-pool.toml already exists at {}", config_path.display());
+    }
+
+    let content = config::Config::default_toml();
+    std::fs::write(&config_path, content)?;
+    eprintln!("created {}", config_path.display());
+    Ok(())
 }
 
 fn cmd_update() -> anyhow::Result<()> {
