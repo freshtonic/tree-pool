@@ -1,3 +1,3 @@
 fn main() {
-    println!("Hello, world!");
+    println!("tp - tree-pool worktree manager");
 }
