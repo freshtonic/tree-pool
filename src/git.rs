@@ -146,6 +146,64 @@ pub fn reset_worktree(worktree_path: &Path, ref_name: &str) -> Result<()> {
     Ok(())
 }
 
+/// List branch names sorted by most recent commit date (newest first).
+/// Deduplicates local and remote branches (prefers local name).
+#[allow(dead_code)]
+pub fn list_branches_by_date(repo_root: &Path) -> Result<Vec<String>> {
+    let output = run_git(
+        repo_root,
+        &[
+            "branch",
+            "--all",
+            "--sort=-committerdate",
+            "--format=%(refname:short)",
+        ],
+    )?;
+
+    let mut seen = std::collections::HashSet::new();
+    let mut branches = Vec::new();
+
+    for line in output.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.contains("HEAD") {
+            continue;
+        }
+        let name = line.strip_prefix("origin/").unwrap_or(line);
+        if seen.insert(name.to_string()) {
+            branches.push(name.to_string());
+        }
+    }
+
+    Ok(branches)
+}
+
+/// Return the set of branch names currently checked out in the main repo
+/// and all its worktrees.
+#[allow(dead_code)]
+pub fn checked_out_branches(repo_root: &Path) -> Result<std::collections::HashSet<String>> {
+    let output = run_git(repo_root, &["worktree", "list", "--porcelain"])?;
+    let mut branches = std::collections::HashSet::new();
+
+    for line in output.lines() {
+        if let Some(branch) = line.strip_prefix("branch refs/heads/") {
+            branches.insert(branch.to_string());
+        }
+    }
+
+    Ok(branches)
+}
+
+/// Return the current branch name for a worktree, or None if detached.
+#[allow(dead_code)]
+pub fn current_branch(worktree_path: &Path) -> Result<Option<String>> {
+    let output = run_git(worktree_path, &["rev-parse", "--abbrev-ref", "HEAD"])?;
+    if output == "HEAD" {
+        Ok(None)
+    } else {
+        Ok(Some(output))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -221,5 +279,38 @@ mod tests {
         let dir = setup_test_repo();
         let url = remote_url(dir.path()).unwrap();
         assert!(url.is_none());
+    }
+
+    #[test]
+    fn test_list_branches_by_date() {
+        let dir = setup_test_repo();
+        let branches = list_branches_by_date(dir.path()).unwrap();
+        assert!(!branches.is_empty());
+    }
+
+    #[test]
+    fn test_checked_out_branches_includes_head() {
+        let dir = setup_test_repo();
+        let branches = checked_out_branches(dir.path()).unwrap();
+        assert!(!branches.is_empty());
+    }
+
+    #[test]
+    fn test_current_branch_detached() {
+        let dir = setup_test_repo();
+        Command::new("git")
+            .args(["checkout", "--detach"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        let branch = current_branch(dir.path()).unwrap();
+        assert!(branch.is_none());
+    }
+
+    #[test]
+    fn test_current_branch_on_branch() {
+        let dir = setup_test_repo();
+        let branch = current_branch(dir.path()).unwrap();
+        assert!(branch.is_some());
     }
 }
