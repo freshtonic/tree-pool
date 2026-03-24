@@ -146,9 +146,17 @@ pub fn reset_worktree(worktree_path: &Path, ref_name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Check if a branch exists locally or on a remote.
+pub fn branch_exists(repo_root: &Path, branch: &str) -> Result<bool> {
+    let local = format!("refs/heads/{branch}");
+    let remote = format!("refs/remotes/origin/{branch}");
+    let local_exists = run_git_ok(repo_root, &["rev-parse", "--verify", &local])?;
+    let remote_exists = run_git_ok(repo_root, &["rev-parse", "--verify", &remote])?;
+    Ok(local_exists || remote_exists)
+}
+
 /// List branch names sorted by most recent commit date (newest first).
 /// Deduplicates local and remote branches (prefers local name).
-#[allow(dead_code)]
 pub fn list_branches_by_date(repo_root: &Path) -> Result<Vec<String>> {
     let output = run_git(
         repo_root,
@@ -179,7 +187,6 @@ pub fn list_branches_by_date(repo_root: &Path) -> Result<Vec<String>> {
 
 /// Return the set of branch names currently checked out in the main repo
 /// and all its worktrees.
-#[allow(dead_code)]
 pub fn checked_out_branches(repo_root: &Path) -> Result<std::collections::HashSet<String>> {
     let output = run_git(repo_root, &["worktree", "list", "--porcelain"])?;
     let mut branches = std::collections::HashSet::new();
@@ -194,7 +201,6 @@ pub fn checked_out_branches(repo_root: &Path) -> Result<std::collections::HashSe
 }
 
 /// Return the current branch name for a worktree, or None if detached.
-#[allow(dead_code)]
 pub fn current_branch(worktree_path: &Path) -> Result<Option<String>> {
     let output = run_git(worktree_path, &["rev-parse", "--abbrev-ref", "HEAD"])?;
     if output == "HEAD" {
@@ -312,5 +318,13 @@ mod tests {
         let dir = setup_test_repo();
         let branch = current_branch(dir.path()).unwrap();
         assert!(branch.is_some());
+    }
+
+    #[test]
+    fn test_branch_exists() {
+        let dir = setup_test_repo();
+        let branch = default_branch(dir.path()).unwrap();
+        assert!(branch_exists(dir.path(), &branch).unwrap());
+        assert!(!branch_exists(dir.path(), "nonexistent-branch-xyz").unwrap());
     }
 }
