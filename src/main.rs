@@ -1,20 +1,12 @@
 mod cli;
-#[allow(dead_code)] // Functions will be used by future modules.
 mod config;
 mod display;
-#[allow(dead_code)] // Functions will be used by future modules.
 mod git;
-#[allow(dead_code)] // Functions will be used by future modules.
 mod gitignore;
-#[allow(dead_code)] // Functions will be used by future modules.
 mod pool;
-#[allow(dead_code)] // Functions will be used by future modules.
 mod process;
-#[allow(dead_code)] // Functions will be used by future modules.
 mod prompt;
-#[allow(dead_code)] // Functions will be used by future modules.
 mod shell;
-#[allow(dead_code)] // Functions will be used by future modules.
 mod state;
 
 use std::path::{Path, PathBuf};
@@ -72,7 +64,9 @@ fn cmd_get() -> anyhow::Result<()> {
         let wt_path = wt.path.clone();
         // Reset to latest default branch
         eprintln!("fetching origin...");
-        git::fetch_origin(&repo_root_path)?;
+        if let Err(e) = git::fetch_origin(&repo_root_path) {
+            eprintln!("warning: failed to fetch origin: {e}");
+        }
         let branch = git::default_branch(&repo_root_path)?;
         let ref_name = git::branch_ref(&repo_root_path, &branch)?;
         git::reset_worktree(&wt_path, &ref_name)?;
@@ -81,7 +75,9 @@ fn cmd_get() -> anyhow::Result<()> {
     } else if st.worktrees.len() < config.max_trees {
         // Create a new worktree
         eprintln!("fetching origin...");
-        git::fetch_origin(&repo_root_path)?;
+        if let Err(e) = git::fetch_origin(&repo_root_path) {
+            eprintln!("warning: failed to fetch origin: {e}");
+        }
         let branch = git::default_branch(&repo_root_path)?;
         let ref_name = git::branch_ref(&repo_root_path, &branch)?;
 
@@ -94,6 +90,7 @@ fn cmd_get() -> anyhow::Result<()> {
         }
 
         git::worktree_add(&repo_root_path, &wt_path, &ref_name)?;
+        let wt_path = wt_path.canonicalize().unwrap_or(wt_path);
         st.add(name, wt_path.clone());
         st.save(&pool_dir)?;
         eprintln!("created worktree: {}", display::pretty_path(&wt_path));
@@ -113,7 +110,7 @@ fn cmd_get() -> anyhow::Result<()> {
 
     // On exit, check if dirty and prompt
     if git::is_dirty(&wt_path).unwrap_or(false) {
-        if prompt::confirm("worktree has uncommitted changes. return it anyway?", true)
+        if prompt::confirm("worktree has uncommitted changes. return it anyway?", false)
             .unwrap_or(true)
         {
             let branch = git::default_branch(&repo_root_path)?;
@@ -156,17 +153,15 @@ fn cmd_status() -> anyhow::Result<()> {
         let dirty = git::is_dirty(&wt.path).unwrap_or(false);
         let current = display::is_current_dir(&wt.path);
 
-        let (status_str, status_colored) = if current {
-            ("here", "here".cyan().bold().to_string())
+        let status_colored = if current {
+            "here".cyan().bold().to_string()
         } else if !procs.is_empty() {
-            ("in-use", "in-use".red().to_string())
+            "in-use".red().to_string()
         } else if dirty {
-            ("dirty", "dirty".yellow().to_string())
+            "dirty".yellow().to_string()
         } else {
-            ("available", "available".green().to_string())
+            "available".green().to_string()
         };
-
-        let _ = status_str; // suppress unused warning
         println!(
             "{:>4}  {:<11}  {}",
             wt.name,
@@ -213,7 +208,7 @@ fn cmd_return(path: Option<String>, force: bool) -> anyhow::Result<()> {
     // Check dirty
     if git::is_dirty(&wt_path)?
         && !force
-        && !prompt::confirm("worktree has uncommitted changes. return it anyway?", true)?
+        && !prompt::confirm("worktree has uncommitted changes. return it anyway?", false)?
     {
         return Ok(());
     }
@@ -300,11 +295,15 @@ fn destroy_worktree(
     st: &mut state::State,
 ) -> anyhow::Result<()> {
     // Remove git worktree
-    let _ = git::worktree_remove(repo_root, wt_path);
+    if let Err(e) = git::worktree_remove(repo_root, wt_path) {
+        eprintln!("warning: failed to remove git worktree: {e}");
+    }
 
     // Remove the numbered parent directory (e.g., <poolDir>/1/)
-    if let Some(parent) = wt_path.parent() {
-        let _ = std::fs::remove_dir_all(parent);
+    if let Some(parent) = wt_path.parent()
+        && let Err(e) = std::fs::remove_dir_all(parent)
+    {
+        eprintln!("warning: failed to remove directory: {e}");
     }
 
     st.remove_by_path(wt_path);

@@ -93,8 +93,13 @@ impl State {
     }
 
     /// Find a worktree entry by its absolute path.
+    /// Canonicalizes both sides to handle symlinks and path normalization.
     pub fn find_by_path(&self, path: &Path) -> Option<&WorktreeEntry> {
-        self.worktrees.iter().find(|wt| wt.path == path)
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        self.worktrees.iter().find(|wt| {
+            let wt_canonical = wt.path.canonicalize().unwrap_or_else(|_| wt.path.clone());
+            wt_canonical == canonical
+        })
     }
 
     /// Add a new worktree entry.
@@ -107,8 +112,13 @@ impl State {
     }
 
     /// Remove a worktree entry by path.
+    /// Canonicalizes both sides to handle symlinks and path normalization.
     pub fn remove_by_path(&mut self, path: &Path) {
-        self.worktrees.retain(|wt| wt.path != path);
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        self.worktrees.retain(|wt| {
+            let wt_canonical = wt.path.canonicalize().unwrap_or_else(|_| wt.path.clone());
+            wt_canonical != canonical
+        });
     }
 }
 
@@ -194,5 +204,27 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let _lock = State::lock(dir.path()).unwrap();
         // Lock is released when _lock is dropped
+    }
+
+    #[test]
+    fn find_by_path_canonicalizes() {
+        let dir = tempfile::tempdir().unwrap();
+        let canonical = dir.path().canonicalize().unwrap();
+        let mut state = State::default();
+        // Store the non-canonical path (e.g., /tmp/... on macOS which is a symlink to /private/tmp/...)
+        state.add("1".to_string(), dir.path().to_path_buf());
+        // Look up by canonical path
+        assert!(state.find_by_path(&canonical).is_some());
+    }
+
+    #[test]
+    fn remove_by_path_canonicalizes() {
+        let dir = tempfile::tempdir().unwrap();
+        let canonical = dir.path().canonicalize().unwrap();
+        let mut state = State::default();
+        state.add("1".to_string(), dir.path().to_path_buf());
+        // Remove using canonical path
+        state.remove_by_path(&canonical);
+        assert!(state.worktrees.is_empty());
     }
 }

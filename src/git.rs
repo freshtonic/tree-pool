@@ -138,6 +138,7 @@ pub fn worktree_remove(repo_root: &Path, worktree_path: &Path) -> Result<()> {
 
 pub fn reset_worktree(worktree_path: &Path, ref_name: &str) -> Result<()> {
     run_git(worktree_path, &["checkout", "--detach", ref_name])?;
+    run_git(worktree_path, &["reset", "--hard"])?;
     run_git(worktree_path, &["clean", "-fd"])?;
     Ok(())
 }
