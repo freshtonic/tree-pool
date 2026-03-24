@@ -35,7 +35,7 @@ fn main() {
     }
 }
 
-fn cmd_get(_branch: Option<String>) -> anyhow::Result<()> {
+fn cmd_get(branch: Option<String>) -> anyhow::Result<()> {
     let cwd = std::env::current_dir()?;
     let root = git::repo_root(&cwd)?;
     let repo_root_path = PathBuf::from(&root);
@@ -53,6 +53,22 @@ fn cmd_get(_branch: Option<String>) -> anyhow::Result<()> {
         eprintln!("warning: failed to update .gitignore: {e}");
     }
 
+    // Fetch before branch selection so the list is up to date
+    if git::has_origin(&repo_root_path)? {
+        eprintln!("fetching origin...");
+        if let Err(e) = git::fetch_origin(&repo_root_path) {
+            eprintln!("warning: failed to fetch origin: {e}");
+        }
+    }
+
+    // Resolve which branch to use
+    let (selected_branch, is_new) = if let Some(ref b) = branch {
+        let exists = branch::validate_branch(&repo_root_path, b)?;
+        (b.clone(), !exists)
+    } else {
+        branch::select_branch(&repo_root_path)?
+    };
+
     let _lock = state::State::lock(&pool_dir)?;
     let mut st = state::State::load(&pool_dir)?;
 
@@ -64,38 +80,30 @@ fn cmd_get(_branch: Option<String>) -> anyhow::Result<()> {
 
     let wt_path = if let Some(wt) = available {
         let wt_path = wt.path.clone();
-        // Reset to latest default branch
-        if git::has_origin(&repo_root_path)? {
-            eprintln!("fetching origin...");
-            if let Err(e) = git::fetch_origin(&repo_root_path) {
-                eprintln!("warning: failed to fetch origin: {e}");
-            }
+        if is_new {
+            // Create a new branch at the worktree's current HEAD, then switch
+            let default = git::default_branch(&repo_root_path)?;
+            let ref_name = git::branch_ref(&repo_root_path, &default)?;
+            git::reset_worktree(&wt_path, &ref_name)?;
+            git::create_and_checkout_branch(&wt_path, &selected_branch)?;
+        } else {
+            git::checkout_branch(&wt_path, &selected_branch)?;
         }
-        let branch = git::default_branch(&repo_root_path)?;
-        let ref_name = git::branch_ref(&repo_root_path, &branch)?;
-        git::reset_worktree(&wt_path, &ref_name)?;
         eprintln!("reusing worktree: {}", display::pretty_path(&wt_path));
         wt_path
     } else if st.worktrees.len() < config.max_trees {
-        // Create a new worktree
-        if git::has_origin(&repo_root_path)? {
-            eprintln!("fetching origin...");
-            if let Err(e) = git::fetch_origin(&repo_root_path) {
-                eprintln!("warning: failed to fetch origin: {e}");
-            }
-        }
-        let branch = git::default_branch(&repo_root_path)?;
-        let ref_name = git::branch_ref(&repo_root_path, &branch)?;
-
         let name = st.next_name();
         let wt_path = pool::worktree_path(&pool_dir, &name, &repo_name);
 
-        // Create parent dir
         if let Some(parent) = wt_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
 
-        git::worktree_add(&repo_root_path, &wt_path, &ref_name)?;
+        if is_new {
+            git::worktree_add_new_branch(&repo_root_path, &wt_path, &selected_branch)?;
+        } else {
+            git::worktree_add_existing_branch(&repo_root_path, &wt_path, &selected_branch)?;
+        }
         let wt_path = wt_path.canonicalize().unwrap_or(wt_path);
         st.add(name, wt_path.clone());
         st.save(&pool_dir)?;
@@ -112,23 +120,22 @@ fn cmd_get(_branch: Option<String>) -> anyhow::Result<()> {
     // Drop the lock before spawning the subshell
     drop(_lock);
 
+    eprintln!("on branch: {selected_branch}");
     let exit_code = shell::spawn_subshell(&wt_path)?;
 
-    // On exit, check if dirty and prompt
+    // On exit, return worktree to clean detached state on default branch
+    let default = git::default_branch(&repo_root_path)?;
+    let ref_name = git::branch_ref(&repo_root_path, &default)?;
+
     if git::is_dirty(&wt_path).unwrap_or(false) {
         if prompt::confirm("worktree has uncommitted changes. return it anyway?", false)
             .unwrap_or(true)
         {
-            let branch = git::default_branch(&repo_root_path)?;
-            let ref_name = git::branch_ref(&repo_root_path, &branch)?;
             if let Err(e) = git::reset_worktree(&wt_path, &ref_name) {
                 eprintln!("warning: failed to reset worktree: {e}");
             }
         }
     } else {
-        // Clean exit — release the worktree
-        let branch = git::default_branch(&repo_root_path)?;
-        let ref_name = git::branch_ref(&repo_root_path, &branch)?;
         if let Err(e) = git::reset_worktree(&wt_path, &ref_name) {
             eprintln!("warning: failed to reset worktree: {e}");
         }

@@ -164,6 +164,18 @@ pub fn worktree_add_existing_branch(
     Ok(())
 }
 
+/// Create a new branch and check it out.
+pub fn create_and_checkout_branch(worktree_path: &Path, branch: &str) -> Result<()> {
+    run_git(worktree_path, &["checkout", "-b", branch])?;
+    Ok(())
+}
+
+/// Check out an existing branch.
+pub fn checkout_branch(worktree_path: &Path, branch: &str) -> Result<()> {
+    run_git(worktree_path, &["checkout", branch])?;
+    Ok(())
+}
+
 /// Check if a branch exists locally or on a remote.
 pub fn branch_exists(repo_root: &Path, branch: &str) -> Result<bool> {
     let local = format!("refs/heads/{branch}");
