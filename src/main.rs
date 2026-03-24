@@ -175,10 +175,16 @@ fn cmd_status() -> anyhow::Result<()> {
         } else {
             "available".green().to_string()
         };
+
+        let branch = git::current_branch(&wt.path)
+            .unwrap_or(None)
+            .unwrap_or_else(|| "(detached)".to_string());
+
         println!(
-            "{:>4}  {:<11}  {}",
+            "{:>4}  {:<11}  {:<20}  {}",
             wt.name,
             status_colored,
+            branch,
             display::pretty_path(&wt.path)
         );
 

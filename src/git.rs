@@ -124,15 +124,6 @@ pub fn branch_ref(repo_root: &Path, branch: &str) -> Result<String> {
     }
 }
 
-pub fn worktree_add(repo_root: &Path, worktree_path: &Path, ref_name: &str) -> Result<()> {
-    let path_str = worktree_path.to_str().context("invalid worktree path")?;
-    run_git(
-        repo_root,
-        &["worktree", "add", "--detach", path_str, ref_name],
-    )?;
-    Ok(())
-}
-
 pub fn worktree_remove(repo_root: &Path, worktree_path: &Path) -> Result<()> {
     let path_str = worktree_path.to_str().context("invalid worktree path")?;
     run_git(repo_root, &["worktree", "remove", "--force", path_str])?;
