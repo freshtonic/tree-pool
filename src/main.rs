@@ -8,6 +8,8 @@ mod pool;
 #[allow(dead_code)] // Functions will be used by future modules.
 mod process;
 #[allow(dead_code)] // Functions will be used by future modules.
+mod gitignore;
+#[allow(dead_code)] // Functions will be used by future modules.
 mod shell;
 #[allow(dead_code)] // Functions will be used by future modules.
 mod state;
