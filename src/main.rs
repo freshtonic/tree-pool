@@ -185,8 +185,43 @@ fn cmd_status() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn cmd_return(_path: Option<String>, _force: bool) -> anyhow::Result<()> {
-    todo!()
+fn cmd_return(path: Option<String>, force: bool) -> anyhow::Result<()> {
+    let cwd = std::env::current_dir()?;
+    let root = git::repo_root(&cwd)?;
+    let repo_root_path = PathBuf::from(&root);
+    let config = config::Config::load(&repo_root_path)?;
+    let pool_dir = pool::resolve_pool_dir(&repo_root_path, &config)?;
+
+    // Resolve the worktree path
+    let wt_path = if let Some(p) = path {
+        PathBuf::from(p).canonicalize()?
+    } else if let Ok(env_path) = std::env::var("TREE_POOL_DIR") {
+        PathBuf::from(env_path).canonicalize()?
+    } else {
+        cwd.canonicalize()?
+    };
+
+    let _lock = state::State::lock(&pool_dir)?;
+    let st = state::State::load(&pool_dir)?;
+
+    // Validate this is a known worktree
+    if st.find_by_path(&wt_path).is_none() {
+        anyhow::bail!("{} is not a tree-pool worktree", wt_path.display());
+    }
+
+    // Check dirty
+    if git::is_dirty(&wt_path)? && !force {
+        if !prompt::confirm("worktree has uncommitted changes. return it anyway?", true)? {
+            return Ok(());
+        }
+    }
+
+    // Reset to clean state
+    let branch = git::default_branch(&repo_root_path)?;
+    let ref_name = git::branch_ref(&repo_root_path, &branch)?;
+    git::reset_worktree(&wt_path, &ref_name)?;
+    eprintln!("returned {}", display::pretty_path(&wt_path));
+    Ok(())
 }
 
 fn cmd_destroy(_path: Option<String>, _force: bool, _all: bool) -> anyhow::Result<()> {
