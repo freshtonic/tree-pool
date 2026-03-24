@@ -71,5 +71,17 @@ fn cmd_init() -> anyhow::Result<()> {
 }
 
 fn cmd_update() -> anyhow::Result<()> {
-    todo!()
+    eprintln!("updating tree-pool...");
+    let status = std::process::Command::new("cargo")
+        .args(["install", "tree-pool"])
+        .stdin(std::process::Stdio::inherit())
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status()?;
+
+    if !status.success() {
+        anyhow::bail!("cargo install tree-pool failed");
+    }
+
+    Ok(())
 }
