@@ -224,8 +224,90 @@ fn cmd_return(path: Option<String>, force: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn cmd_destroy(_path: Option<String>, _force: bool, _all: bool) -> anyhow::Result<()> {
-    todo!()
+fn cmd_destroy(path: Option<String>, force: bool, all: bool) -> anyhow::Result<()> {
+    let cwd = std::env::current_dir()?;
+    let root = git::repo_root(&cwd)?;
+    let repo_root_path = PathBuf::from(&root);
+    let config = config::Config::load(&repo_root_path)?;
+    let pool_dir = pool::resolve_pool_dir(&repo_root_path, &config)?;
+
+    let _lock = state::State::lock(&pool_dir)?;
+    let mut st = state::State::load(&pool_dir)?;
+
+    if all {
+        if st.worktrees.is_empty() {
+            eprintln!("no worktrees to destroy");
+            return Ok(());
+        }
+
+        if !force
+            && !prompt::confirm(
+                &format!("destroy all {} worktrees?", st.worktrees.len()),
+                false,
+            )?
+        {
+            return Ok(());
+        }
+
+        let paths: Vec<_> = st.worktrees.iter().map(|wt| wt.path.clone()).collect();
+        for wt_path in &paths {
+            if !force && process::is_in_use(wt_path) {
+                eprintln!(
+                    "skipping {} (in use) — use --force to override",
+                    display::pretty_path(wt_path)
+                );
+                continue;
+            }
+            destroy_worktree(&repo_root_path, &pool_dir, wt_path, &mut st)?;
+        }
+    } else {
+        let path = path.context("path argument is required (or use --all)")?;
+        let wt_path = PathBuf::from(&path).canonicalize()?;
+
+        if st.find_by_path(&wt_path).is_none() {
+            anyhow::bail!("{} is not a tree-pool worktree", wt_path.display());
+        }
+
+        if !force {
+            if process::is_in_use(&wt_path) {
+                anyhow::bail!(
+                    "{} is in use — use --force to override",
+                    display::pretty_path(&wt_path)
+                );
+            }
+
+            if !prompt::confirm(
+                &format!("destroy worktree {}?", display::pretty_path(&wt_path)),
+                false,
+            )? {
+                return Ok(());
+            }
+        }
+
+        destroy_worktree(&repo_root_path, &pool_dir, &wt_path, &mut st)?;
+    }
+
+    st.save(&pool_dir)?;
+    Ok(())
+}
+
+fn destroy_worktree(
+    repo_root: &Path,
+    _pool_dir: &Path,
+    wt_path: &Path,
+    st: &mut state::State,
+) -> anyhow::Result<()> {
+    // Remove git worktree
+    let _ = git::worktree_remove(repo_root, wt_path);
+
+    // Remove the numbered parent directory (e.g., <poolDir>/1/)
+    if let Some(parent) = wt_path.parent() {
+        let _ = std::fs::remove_dir_all(parent);
+    }
+
+    st.remove_by_path(wt_path);
+    eprintln!("destroyed {}", display::pretty_path(wt_path));
+    Ok(())
 }
 
 fn cmd_init() -> anyhow::Result<()> {
