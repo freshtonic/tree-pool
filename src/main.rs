@@ -20,7 +20,8 @@ fn main() {
     let cli = Cli::parse();
 
     let result = match cli.command {
-        None | Some(Command::Get) => cmd_get(),
+        Some(Command::Get { branch }) => cmd_get(branch),
+        None => cmd_get(None),
         Some(Command::Status) => cmd_status(),
         Some(Command::Return { path, force }) => cmd_return(path, force),
         Some(Command::Destroy { path, force, all }) => cmd_destroy(path, force, all),
@@ -34,7 +35,7 @@ fn main() {
     }
 }
 
-fn cmd_get() -> anyhow::Result<()> {
+fn cmd_get(branch: Option<String>) -> anyhow::Result<()> {
     let cwd = std::env::current_dir()?;
     let root = git::repo_root(&cwd)?;
     let repo_root_path = PathBuf::from(&root);

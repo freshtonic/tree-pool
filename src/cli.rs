@@ -15,7 +15,10 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Command {
     /// Acquire a worktree from the pool and open a subshell
-    Get,
+    Get {
+        /// Branch to check out in the worktree
+        branch: Option<String>,
+    },
     /// Show pool status
     Status,
     /// Return a worktree to the pool
@@ -57,7 +60,29 @@ mod tests {
     #[test]
     fn get_subcommand() {
         let cli = Cli::parse_from(["tp", "get"]);
-        assert!(matches!(cli.command, Some(Command::Get)));
+        assert!(matches!(cli.command, Some(Command::Get { .. })));
+    }
+
+    #[test]
+    fn get_with_branch() {
+        let cli = Cli::parse_from(["tp", "get", "feature/foo"]);
+        match cli.command {
+            Some(Command::Get { branch }) => {
+                assert_eq!(branch.as_deref(), Some("feature/foo"));
+            }
+            _ => panic!("expected Get command"),
+        }
+    }
+
+    #[test]
+    fn get_without_branch() {
+        let cli = Cli::parse_from(["tp", "get"]);
+        match cli.command {
+            Some(Command::Get { branch }) => {
+                assert!(branch.is_none());
+            }
+            _ => panic!("expected Get command"),
+        }
     }
 
     #[test]
