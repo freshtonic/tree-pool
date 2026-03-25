@@ -175,7 +175,7 @@ fn cmd_status() -> anyhow::Result<()> {
     let state = state::State::load(&pool_dir)?;
 
     if state.trees.is_empty() {
-        eprintln!("no worktrees in pool");
+        eprintln!("no trees in pool");
         return Ok(());
     }
 

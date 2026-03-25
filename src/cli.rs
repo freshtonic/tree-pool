@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 #[command(
     name = "tp",
     version = concat!("tree-pool ", env!("CARGO_PKG_VERSION")),
-    about = "Manage a pool of reusable git worktrees"
+    about = "Manage a pool of reusable local git clones"
 )]
 #[command(disable_help_subcommand = true)]
 pub struct Cli {
@@ -14,29 +14,29 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Acquire a worktree from the pool and open a subshell
+    /// Acquire a tree from the pool
     Get {
-        /// Branch to check out in the worktree
+        /// Branch to check out in the tree
         branch: Option<String>,
     },
     /// Show pool status
     Status,
-    /// Return a worktree to the pool
+    /// Return a tree to the pool
     Return {
-        /// Path to the worktree to return
+        /// Path to the tree to return
         path: Option<String>,
         /// Skip dirty-check prompt
         #[arg(long)]
         force: bool,
     },
-    /// Remove a worktree from the pool permanently
+    /// Remove a tree from the pool permanently
     Destroy {
-        /// Path to the worktree to destroy
+        /// Path to the tree to destroy
         path: Option<String>,
-        /// Force destroy even if in-use
+        /// Force destroy even if dirty or has unpushed branches
         #[arg(long)]
         force: bool,
-        /// Destroy all worktrees
+        /// Destroy all trees
         #[arg(long)]
         all: bool,
     },

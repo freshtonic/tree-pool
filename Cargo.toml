@@ -2,7 +2,7 @@
 name = "tree-pool"
 version = "0.1.0"
 edition = "2024"
-description = "A CLI tool for managing pools of reusable git worktrees"
+description = "A CLI tool for managing pools of reusable local git clones"
 license = "MIT"
 
 [[bin]]

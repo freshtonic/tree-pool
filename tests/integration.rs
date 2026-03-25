@@ -92,5 +92,5 @@ fn status_in_empty_pool() {
     let output = tp().arg("status").current_dir(path).output().unwrap();
     assert!(output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("no worktrees"));
+    assert!(stderr.contains("no trees"));
 }
