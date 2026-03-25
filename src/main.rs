@@ -101,7 +101,7 @@ fn cmd_get(branch: Option<String>) -> anyhow::Result<()> {
         wt_path
     } else if st.trees.len() < config.max_trees {
         let name = st.next_name();
-        let wt_path = pool::worktree_path(&pool_dir, &name, &repo_name);
+        let wt_path = pool::tree_path(&pool_dir, &name, &repo_name);
 
         if let Some(parent) = wt_path.parent() {
             std::fs::create_dir_all(parent)?;

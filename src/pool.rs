@@ -39,9 +39,9 @@ fn short_sha256(input: &str) -> String {
     hex::encode(&result[..3])
 }
 
-/// Compute the worktree path within the pool.
+/// Compute the tree path within the pool.
 /// Format: <poolDir>/<name>/<repoName>/
-pub fn worktree_path(pool_dir: &Path, name: &str, repo_name: &str) -> PathBuf {
+pub fn tree_path(pool_dir: &Path, name: &str, repo_name: &str) -> PathBuf {
     pool_dir.join(name).join(repo_name)
 }
 
@@ -65,9 +65,9 @@ mod tests {
     }
 
     #[test]
-    fn worktree_path_format() {
+    fn tree_path_format() {
         let pool_dir = Path::new("/home/user/.tree-pool/myrepo-abc123");
-        let path = worktree_path(pool_dir, "1", "myrepo");
+        let path = tree_path(pool_dir, "1", "myrepo");
         assert_eq!(
             path,
             PathBuf::from("/home/user/.tree-pool/myrepo-abc123/1/myrepo")
