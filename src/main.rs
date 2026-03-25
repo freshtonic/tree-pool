@@ -76,15 +76,13 @@ fn cmd_get(branch: Option<String>) -> anyhow::Result<()> {
     if !is_new {
         let checked_out = git::checked_out_branches(&repo_root_path)?;
         if checked_out.contains(&selected_branch) {
-            anyhow::bail!(
-                "branch '{selected_branch}' is already checked out in another worktree"
-            );
+            anyhow::bail!("branch '{selected_branch}' is already checked out in another worktree");
         }
     }
 
     // Try to find an available worktree (not in-use and not dirty)
     let available = st
-        .worktrees
+        .trees
         .iter()
         .find(|wt| !process::is_in_use(&wt.path) && !git::is_dirty(&wt.path).unwrap_or(true));
 
@@ -101,7 +99,7 @@ fn cmd_get(branch: Option<String>) -> anyhow::Result<()> {
         }
         eprintln!("reusing worktree: {}", display::pretty_path(&wt_path));
         wt_path
-    } else if st.worktrees.len() < config.max_trees {
+    } else if st.trees.len() < config.max_trees {
         let name = st.next_name();
         let wt_path = pool::worktree_path(&pool_dir, &name, &repo_name);
 
@@ -161,14 +159,14 @@ fn cmd_status() -> anyhow::Result<()> {
     let _lock = state::State::lock(&pool_dir)?;
     let state = state::State::load(&pool_dir)?;
 
-    if state.worktrees.is_empty() {
+    if state.trees.is_empty() {
         eprintln!("no worktrees in pool");
         return Ok(());
     }
 
     use colored::Colorize;
 
-    for wt in &state.worktrees {
+    for wt in &state.trees {
         let procs = process::processes_in_dir(&wt.path);
         let dirty = git::is_dirty(&wt.path).unwrap_or(false);
         let current = display::is_current_dir(&wt.path);
@@ -258,21 +256,17 @@ fn cmd_destroy(path: Option<String>, force: bool, all: bool) -> anyhow::Result<(
     let mut st = state::State::load(&pool_dir)?;
 
     if all {
-        if st.worktrees.is_empty() {
+        if st.trees.is_empty() {
             eprintln!("no worktrees to destroy");
             return Ok(());
         }
 
-        if !force
-            && !prompt::confirm(
-                &format!("destroy all {} worktrees?", st.worktrees.len()),
-                false,
-            )?
+        if !force && !prompt::confirm(&format!("destroy all {} worktrees?", st.trees.len()), false)?
         {
             return Ok(());
         }
 
-        let paths: Vec<_> = st.worktrees.iter().map(|wt| wt.path.clone()).collect();
+        let paths: Vec<_> = st.trees.iter().map(|wt| wt.path.clone()).collect();
         for wt_path in &paths {
             if !force && process::is_in_use(wt_path) {
                 eprintln!(

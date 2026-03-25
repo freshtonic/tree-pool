@@ -6,7 +6,7 @@ use std::fs::{self, File, OpenOptions};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WorktreeEntry {
+pub struct TreeEntry {
     pub name: String,
     pub path: PathBuf,
     pub created_at: DateTime<Utc>,
@@ -14,7 +14,8 @@ pub struct WorktreeEntry {
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct State {
-    pub worktrees: Vec<WorktreeEntry>,
+    #[serde(alias = "worktrees")]
+    pub trees: Vec<TreeEntry>,
 }
 
 /// Guard that holds the lock file open. Lock is released when dropped.
@@ -67,9 +68,9 @@ impl State {
             .with_context(|| format!("failed to parse {}", state_path.display()))?;
 
         // Self-healing: remove entries whose paths no longer exist
-        let before = state.worktrees.len();
-        state.worktrees.retain(|wt| wt.path.exists());
-        if state.worktrees.len() != before {
+        let before = state.trees.len();
+        state.trees.retain(|wt| wt.path.exists());
+        if state.trees.len() != before {
             state.save(pool_dir)?;
         }
 
@@ -119,10 +120,10 @@ impl State {
         Ok(())
     }
 
-    /// Find the next sequential worktree name (max existing + 1).
+    /// Find the next sequential tree name (max existing + 1).
     pub fn next_name(&self) -> String {
         let max = self
-            .worktrees
+            .trees
             .iter()
             .filter_map(|wt| wt.name.parse::<u32>().ok())
             .max()
@@ -130,30 +131,30 @@ impl State {
         (max + 1).to_string()
     }
 
-    /// Find a worktree entry by its absolute path.
+    /// Find a tree entry by its absolute path.
     /// Canonicalizes both sides to handle symlinks and path normalization.
-    pub fn find_by_path(&self, path: &Path) -> Option<&WorktreeEntry> {
+    pub fn find_by_path(&self, path: &Path) -> Option<&TreeEntry> {
         let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-        self.worktrees.iter().find(|wt| {
+        self.trees.iter().find(|wt| {
             let wt_canonical = wt.path.canonicalize().unwrap_or_else(|_| wt.path.clone());
             wt_canonical == canonical
         })
     }
 
-    /// Add a new worktree entry.
+    /// Add a new tree entry.
     pub fn add(&mut self, name: String, path: PathBuf) {
-        self.worktrees.push(WorktreeEntry {
+        self.trees.push(TreeEntry {
             name,
             path,
             created_at: Utc::now(),
         });
     }
 
-    /// Remove a worktree entry by path.
+    /// Remove a tree entry by path.
     /// Canonicalizes both sides to handle symlinks and path normalization.
     pub fn remove_by_path(&mut self, path: &Path) {
         let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-        self.worktrees.retain(|wt| {
+        self.trees.retain(|wt| {
             let wt_canonical = wt.path.canonicalize().unwrap_or_else(|_| wt.path.clone());
             wt_canonical != canonical
         });
@@ -167,7 +168,7 @@ mod tests {
     #[test]
     fn empty_state_by_default() {
         let state = State::default();
-        assert!(state.worktrees.is_empty());
+        assert!(state.trees.is_empty());
     }
 
     #[test]
@@ -198,8 +199,8 @@ mod tests {
         state.add("1".to_string(), PathBuf::from("/a"));
         state.add("2".to_string(), PathBuf::from("/b"));
         state.remove_by_path(Path::new("/a"));
-        assert_eq!(state.worktrees.len(), 1);
-        assert_eq!(state.worktrees[0].name, "2");
+        assert_eq!(state.trees.len(), 1);
+        assert_eq!(state.trees[0].name, "2");
     }
 
     #[test]
@@ -210,15 +211,15 @@ mod tests {
         state.save(dir.path()).unwrap();
 
         let loaded = State::load(dir.path()).unwrap();
-        assert_eq!(loaded.worktrees.len(), 1);
-        assert_eq!(loaded.worktrees[0].name, "1");
+        assert_eq!(loaded.trees.len(), 1);
+        assert_eq!(loaded.trees[0].name, "1");
     }
 
     #[test]
     fn load_missing_file_returns_empty() {
         let dir = tempfile::tempdir().unwrap();
         let state = State::load(dir.path()).unwrap();
-        assert!(state.worktrees.is_empty());
+        assert!(state.trees.is_empty());
     }
 
     #[test]
@@ -235,8 +236,8 @@ mod tests {
         fs::write(&state_path, contents).unwrap();
 
         let loaded = State::load(dir.path()).unwrap();
-        assert_eq!(loaded.worktrees.len(), 1);
-        assert_eq!(loaded.worktrees[0].name, "2");
+        assert_eq!(loaded.trees.len(), 1);
+        assert_eq!(loaded.trees[0].name, "2");
     }
 
     #[test]
@@ -265,7 +266,7 @@ mod tests {
         state.add("1".to_string(), dir.path().to_path_buf());
         // Remove using canonical path
         state.remove_by_path(&canonical);
-        assert!(state.worktrees.is_empty());
+        assert!(state.trees.is_empty());
     }
 
     #[test]
@@ -295,6 +296,25 @@ mod tests {
     }
 
     #[test]
+    fn deserializes_worktrees_key_via_alias() {
+        // Existing state files on disk use "worktrees" as the JSON key.
+        // The serde alias ensures they still load correctly after the rename to "trees".
+        let json = r#"{"worktrees":[{"name":"1","path":"/tmp/test","created_at":"2025-01-01T00:00:00Z"}]}"#;
+        let state: State = serde_json::from_str(json).unwrap();
+        assert_eq!(state.trees.len(), 1);
+        assert_eq!(state.trees[0].name, "1");
+    }
+
+    #[test]
+    fn serializes_as_trees_key() {
+        let mut state = State::default();
+        state.add("1".to_string(), PathBuf::from("/tmp/test"));
+        let json = serde_json::to_string(&state).unwrap();
+        assert!(json.contains("\"trees\""));
+        assert!(!json.contains("\"worktrees\""));
+    }
+
+    #[test]
     fn migrate_moves_old_files_to_meta() {
         let dir = tempfile::tempdir().unwrap();
         let pool = dir.path();
@@ -303,7 +323,7 @@ mod tests {
         fs::write(pool.join("tree-pool-state.lock"), "").unwrap();
 
         let state = State::load(pool).unwrap();
-        assert!(state.worktrees.is_empty());
+        assert!(state.trees.is_empty());
 
         assert!(!pool.join("tree-pool-state.json").exists());
         assert!(!pool.join("tree-pool-state.lock").exists());
