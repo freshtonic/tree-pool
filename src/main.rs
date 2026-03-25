@@ -282,12 +282,7 @@ fn cmd_destroy(path: Option<String>, force: bool, all: bool) -> anyhow::Result<(
             return Ok(());
         }
 
-        if !force
-            && !prompt::confirm(
-                &format!("destroy all {} trees?", st.trees.len()),
-                false,
-            )?
-        {
+        if !force && !prompt::confirm(&format!("destroy all {} trees?", st.trees.len()), false)? {
             return Ok(());
         }
 
@@ -336,11 +331,7 @@ fn cmd_destroy(path: Option<String>, force: bool, all: bool) -> anyhow::Result<(
     Ok(())
 }
 
-fn destroy_tree(
-    tree_path: &Path,
-    st: &mut state::State,
-    force: bool,
-) -> anyhow::Result<()> {
+fn destroy_tree(tree_path: &Path, st: &mut state::State, force: bool) -> anyhow::Result<()> {
     if !force {
         if git::is_dirty(tree_path)? {
             anyhow::bail!(
@@ -359,10 +350,10 @@ fn destroy_tree(
     }
 
     // Remove the numbered parent directory (e.g., <poolDir>/1/)
-    if let Some(parent) = tree_path.parent() {
-        if let Err(e) = std::fs::remove_dir_all(parent) {
-            eprintln!("warning: failed to remove directory: {e}");
-        }
+    if let Some(parent) = tree_path.parent()
+        && let Err(e) = std::fs::remove_dir_all(parent)
+    {
+        eprintln!("warning: failed to remove directory: {e}");
     }
 
     st.remove_by_path(tree_path);
