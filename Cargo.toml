@@ -2,7 +2,7 @@
 name = "tree-pool"
 version = "0.1.0"
 edition = "2024"
-description = "A CLI tool for managing pools of reusable local git clones"
+description = "A CLI tool (`tp`) for managing pools of reusable, pre-warmed local git clones for parallel AI coding agent workflows."
 license = "MIT"
 repository = "https://github.com/jamessadler/tree-pool"
 
