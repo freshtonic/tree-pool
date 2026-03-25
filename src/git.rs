@@ -231,6 +231,89 @@ pub fn current_branch(worktree_path: &Path) -> Result<Option<String>> {
     }
 }
 
+/// Clone a repository using --local for hardlinked objects.
+#[allow(dead_code)]
+pub fn clone_local(source: &Path, dest: &Path) -> Result<()> {
+    let source_str = source.to_str().context("invalid source path")?;
+    let dest_str = dest.to_str().context("invalid dest path")?;
+    // Run from source's parent since clone creates the dest directory
+    let parent = source.parent().unwrap_or(source);
+    run_git(parent, &["clone", "--local", source_str, dest_str])?;
+    Ok(())
+}
+
+/// Rename a remote.
+#[allow(dead_code)]
+pub fn rename_remote(repo: &Path, old: &str, new: &str) -> Result<()> {
+    run_git(repo, &["remote", "rename", old, new])?;
+    Ok(())
+}
+
+/// Add a new remote.
+#[allow(dead_code)]
+pub fn add_remote(repo: &Path, name: &str, url: &str) -> Result<()> {
+    run_git(repo, &["remote", "add", name, url])?;
+    Ok(())
+}
+
+/// Check if a remote exists by name.
+#[allow(dead_code)]
+pub fn has_remote(repo: &Path, name: &str) -> Result<bool> {
+    let remotes = run_git(repo, &["remote"])?;
+    Ok(remotes.lines().any(|r| r == name))
+}
+
+/// Fetch from a specific remote. Returns Ok(()) on success, Err on failure.
+#[allow(dead_code)]
+pub fn fetch_remote(repo: &Path, remote: &str) -> Result<()> {
+    run_git(repo, &["fetch", remote])?;
+    Ok(())
+}
+
+/// Return the list of local branch names that have no corresponding branch
+/// on any remote, or are ahead of all remotes.
+#[allow(dead_code)]
+pub fn unpushed_branches(repo: &Path) -> Result<Vec<String>> {
+    let output = run_git(repo, &["branch", "--format=%(refname:short)"])?;
+    let mut unpushed = Vec::new();
+
+    for branch in output.lines() {
+        let branch = branch.trim();
+        if branch.is_empty() {
+            continue;
+        }
+
+        // Check if any remote has this branch at the same or newer commit
+        let remotes_output = run_git(repo, &["remote"])?;
+        let mut pushed = false;
+
+        for remote in remotes_output.lines() {
+            let remote = remote.trim();
+            if remote.is_empty() {
+                continue;
+            }
+            let remote_ref = format!("{remote}/{branch}");
+            // Check if remote ref exists
+            if !run_git_ok(repo, &["rev-parse", "--verify", &remote_ref])? {
+                continue;
+            }
+            // Check if local is ancestor-or-equal to remote (i.e., not ahead)
+            let local_is_ancestor =
+                run_git_ok(repo, &["merge-base", "--is-ancestor", branch, &remote_ref])?;
+            if local_is_ancestor {
+                pushed = true;
+                break;
+            }
+        }
+
+        if !pushed {
+            unpushed.push(branch.to_string());
+        }
+    }
+
+    Ok(unpushed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -382,5 +465,81 @@ mod tests {
         let branch = default_branch(dir.path()).unwrap();
         assert!(branch_exists(dir.path(), &branch).unwrap());
         assert!(!branch_exists(dir.path(), "nonexistent-branch-xyz").unwrap());
+    }
+
+    #[test]
+    fn test_clone_local() {
+        let source = setup_test_repo();
+        let dest_dir = tempfile::tempdir().unwrap();
+        let dest = dest_dir.path().join("clone");
+        clone_local(source.path(), &dest).unwrap();
+        assert!(dest.join(".git").exists());
+        // Clone should have the source as origin
+        let url = remote_url(&dest).unwrap().unwrap();
+        assert!(url.contains(source.path().to_str().unwrap()));
+    }
+
+    #[test]
+    fn test_rename_remote() {
+        let source = setup_test_repo();
+        let dest_dir = tempfile::tempdir().unwrap();
+        let dest = dest_dir.path().join("clone");
+        clone_local(source.path(), &dest).unwrap();
+        rename_remote(&dest, "origin", "local").unwrap();
+        // "origin" should no longer exist
+        assert!(!has_remote(&dest, "origin").unwrap());
+        // "local" should exist
+        assert!(has_remote(&dest, "local").unwrap());
+    }
+
+    #[test]
+    fn test_add_remote() {
+        let dir = setup_test_repo();
+        add_remote(dir.path(), "upstream", "https://example.com/repo.git").unwrap();
+        assert!(has_remote(dir.path(), "upstream").unwrap());
+    }
+
+    #[test]
+    fn test_fetch_remote_existing() {
+        let source = setup_test_repo();
+        let dest_dir = tempfile::tempdir().unwrap();
+        let dest = dest_dir.path().join("clone");
+        clone_local(source.path(), &dest).unwrap();
+        // Fetching origin (which points to local source) should succeed
+        fetch_remote(&dest, "origin").unwrap();
+    }
+
+    #[test]
+    fn test_has_remote() {
+        let dir = setup_test_repo();
+        assert!(!has_remote(dir.path(), "origin").unwrap());
+        add_remote(dir.path(), "origin", "https://example.com/repo.git").unwrap();
+        assert!(has_remote(dir.path(), "origin").unwrap());
+    }
+
+    #[test]
+    fn test_unpushed_branches_none_when_pushed() {
+        let source = setup_test_repo();
+        let dest_dir = tempfile::tempdir().unwrap();
+        let dest = dest_dir.path().join("clone");
+        clone_local(source.path(), &dest).unwrap();
+        // Default branch should be tracked by origin — no unpushed branches
+        let unpushed = unpushed_branches(&dest).unwrap();
+        assert!(unpushed.is_empty());
+    }
+
+    #[test]
+    fn test_unpushed_branches_detects_new_branch() {
+        let source = setup_test_repo();
+        let dest_dir = tempfile::tempdir().unwrap();
+        let dest = dest_dir.path().join("clone");
+        clone_local(source.path(), &dest).unwrap();
+        // Create a new branch with a commit
+        run_git(&dest, &["checkout", "-b", "feature/new"]).unwrap();
+        std::fs::write(dest.join("new.txt"), "content").unwrap();
+        run_git(&dest, &["add", "."]).unwrap();
+        run_git(&dest, &["commit", "-m", "new commit"]).unwrap();
+        let unpushed = unpushed_branches(&dest).unwrap();
+        assert!(unpushed.contains(&"feature/new".to_string()));
     }
 }
