@@ -130,10 +130,10 @@ pub fn worktree_remove(repo_root: &Path, worktree_path: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn reset_worktree(worktree_path: &Path, ref_name: &str) -> Result<()> {
-    run_git(worktree_path, &["checkout", "--detach", ref_name])?;
-    run_git(worktree_path, &["reset", "--hard"])?;
-    run_git(worktree_path, &["clean", "-fd"])?;
+pub fn reset_tree(tree_path: &Path, ref_name: &str) -> Result<()> {
+    run_git(tree_path, &["checkout", "--detach", ref_name])?;
+    run_git(tree_path, &["reset", "--hard"])?;
+    run_git(tree_path, &["clean", "-fd"])?;
     Ok(())
 }
 
@@ -232,7 +232,6 @@ pub fn current_branch(worktree_path: &Path) -> Result<Option<String>> {
 }
 
 /// Clone a repository using --local for hardlinked objects.
-#[allow(dead_code)]
 pub fn clone_local(source: &Path, dest: &Path) -> Result<()> {
     let source_str = source.to_str().context("invalid source path")?;
     let dest_str = dest.to_str().context("invalid dest path")?;
@@ -243,28 +242,24 @@ pub fn clone_local(source: &Path, dest: &Path) -> Result<()> {
 }
 
 /// Rename a remote.
-#[allow(dead_code)]
 pub fn rename_remote(repo: &Path, old: &str, new: &str) -> Result<()> {
     run_git(repo, &["remote", "rename", old, new])?;
     Ok(())
 }
 
 /// Add a new remote.
-#[allow(dead_code)]
 pub fn add_remote(repo: &Path, name: &str, url: &str) -> Result<()> {
     run_git(repo, &["remote", "add", name, url])?;
     Ok(())
 }
 
 /// Check if a remote exists by name.
-#[allow(dead_code)]
 pub fn has_remote(repo: &Path, name: &str) -> Result<bool> {
     let remotes = run_git(repo, &["remote"])?;
     Ok(remotes.lines().any(|r| r == name))
 }
 
 /// Fetch from a specific remote. Returns Ok(()) on success, Err on failure.
-#[allow(dead_code)]
 pub fn fetch_remote(repo: &Path, remote: &str) -> Result<()> {
     run_git(repo, &["fetch", remote])?;
     Ok(())
@@ -272,7 +267,6 @@ pub fn fetch_remote(repo: &Path, remote: &str) -> Result<()> {
 
 /// Return the list of local branch names that have no corresponding branch
 /// on any remote, or are ahead of all remotes.
-#[allow(dead_code)]
 pub fn unpushed_branches(repo: &Path) -> Result<Vec<String>> {
     let output = run_git(repo, &["branch", "--format=%(refname:short)"])?;
     let mut unpushed = Vec::new();
@@ -526,6 +520,33 @@ mod tests {
         // Default branch should be tracked by origin — no unpushed branches
         let unpushed = unpushed_branches(&dest).unwrap();
         assert!(unpushed.is_empty());
+    }
+
+    #[test]
+    fn test_reset_tree() {
+        let dir = setup_test_repo();
+        // Create a new branch with a commit
+        run_git(dir.path(), &["checkout", "-b", "feature/dirty"]).unwrap();
+        std::fs::write(dir.path().join("extra.txt"), "dirty").unwrap();
+        run_git(dir.path(), &["add", "."]).unwrap();
+        run_git(dir.path(), &["commit", "-m", "dirty commit"]).unwrap();
+        // Also leave an untracked file
+        std::fs::write(dir.path().join("untracked.txt"), "junk").unwrap();
+
+        // Reset to default branch ref
+        let default = default_branch(dir.path()).unwrap();
+        let ref_name = format!("refs/heads/{default}");
+        reset_tree(dir.path(), &ref_name).unwrap();
+
+        // Should be detached HEAD
+        let branch = current_branch(dir.path()).unwrap();
+        assert!(branch.is_none(), "expected detached HEAD after reset_tree");
+
+        // Untracked file should be cleaned
+        assert!(
+            !dir.path().join("untracked.txt").exists(),
+            "untracked file should be removed by reset_tree"
+        );
     }
 
     #[test]

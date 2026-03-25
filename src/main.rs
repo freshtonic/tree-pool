@@ -36,6 +36,8 @@ fn main() {
 }
 
 fn cmd_get(branch: Option<String>) -> anyhow::Result<()> {
+    use std::io::IsTerminal;
+
     let cwd = std::env::current_dir()?;
     let root = git::repo_root(&cwd)?;
     let repo_root_path = PathBuf::from(&root);
@@ -72,55 +74,76 @@ fn cmd_get(branch: Option<String>) -> anyhow::Result<()> {
     let _lock = state::State::lock(&pool_dir)?;
     let mut st = state::State::load(&pool_dir)?;
 
-    // Re-validate after acquiring lock to avoid TOCTOU race
-    if !is_new {
-        let checked_out = git::checked_out_branches(&repo_root_path)?;
-        if checked_out.contains(&selected_branch) {
-            anyhow::bail!("branch '{selected_branch}' is already checked out in another worktree");
-        }
-    }
-
-    // Try to find an available worktree (not in-use and not dirty)
+    // Try to find an available tree (not in-use and not dirty)
     let available = st
         .trees
         .iter()
-        .find(|wt| !process::is_in_use(&wt.path) && !git::is_dirty(&wt.path).unwrap_or(true));
+        .find(|t| !process::is_in_use(&t.path) && !git::is_dirty(&t.path).unwrap_or(true));
 
-    let wt_path = if let Some(wt) = available {
-        let wt_path = wt.path.clone();
-        let default = git::default_branch(&repo_root_path)?;
-        let ref_name = git::branch_ref(&repo_root_path, &default)?;
-        git::reset_worktree(&wt_path, &ref_name)?;
-        if is_new {
-            // Reset to default branch, then create the new branch from there
-            git::create_and_checkout_branch(&wt_path, &selected_branch)?;
-        } else {
-            git::checkout_branch(&wt_path, &selected_branch)?;
+    let tree_path = if let Some(tree) = available {
+        let tree_path = tree.path.clone();
+
+        // Fetch from local remote to pick up latest source repo state
+        if let Err(e) = git::fetch_remote(&tree_path, "local") {
+            eprintln!("warning: failed to fetch local remote: {e}");
         }
-        eprintln!("reusing worktree: {}", display::pretty_path(&wt_path));
-        wt_path
+
+        // Fetch from origin if it exists
+        if git::has_remote(&tree_path, "origin")?
+            && let Err(e) = git::fetch_remote(&tree_path, "origin")
+        {
+            eprintln!("warning: failed to fetch origin: {e}");
+        }
+
+        // Reset and checkout the requested branch
+        let default = git::default_branch(&repo_root_path)?;
+        let ref_name = git::branch_ref(&tree_path, &default)?;
+        git::reset_tree(&tree_path, &ref_name)?;
+
+        if is_new {
+            git::create_and_checkout_branch(&tree_path, &selected_branch)?;
+        } else {
+            git::checkout_branch(&tree_path, &selected_branch)?;
+        }
+
+        eprintln!("reusing tree: {}", display::pretty_path(&tree_path));
+        tree_path
     } else if st.trees.len() < config.max_trees {
         let name = st.next_name();
-        let wt_path = pool::tree_path(&pool_dir, &name, &repo_name);
+        let tp = pool::tree_path(&pool_dir, &name, &repo_name);
 
-        if let Some(parent) = wt_path.parent() {
+        if let Some(parent) = tp.parent() {
             std::fs::create_dir_all(parent)?;
         }
 
-        if is_new {
-            git::worktree_add_new_branch(&repo_root_path, &wt_path, &selected_branch)?;
-        } else {
-            git::worktree_add_existing_branch(&repo_root_path, &wt_path, &selected_branch)?;
+        // Clone locally — objects are hardlinked
+        git::clone_local(&repo_root_path, &tp)?;
+
+        // Set up remotes: rename origin→local, add real origin if source has one
+        git::rename_remote(&tp, "origin", "local")?;
+        if let Some(url) = git::remote_url(&repo_root_path)? {
+            git::add_remote(&tp, "origin", &url)?;
+            if let Err(e) = git::fetch_remote(&tp, "origin") {
+                eprintln!("warning: failed to fetch origin: {e}");
+            }
         }
-        let wt_path = wt_path.canonicalize().unwrap_or(wt_path);
-        st.add(name, wt_path.clone());
+
+        // Checkout the requested branch
+        if is_new {
+            git::create_and_checkout_branch(&tp, &selected_branch)?;
+        } else {
+            git::checkout_branch(&tp, &selected_branch)?;
+        }
+
+        let tp = tp.canonicalize().unwrap_or(tp);
+        st.add(name, tp.clone());
         st.save(&pool_dir)?;
-        eprintln!("created worktree: {}", display::pretty_path(&wt_path));
-        wt_path
+        eprintln!("created tree: {}", display::pretty_path(&tp));
+        tp
     } else {
         anyhow::bail!(
-            "all {} worktrees are in use or dirty — run `tp status` to see details, \
-             `tp return` to return a dirty worktree, or increase max_trees in tree-pool.toml",
+            "all {} trees are in use or dirty — run `tp status` to see details, \
+             `tp return` to free a tree, or increase max_trees in tree-pool.toml",
             config.max_trees
         );
     };
@@ -129,24 +152,16 @@ fn cmd_get(branch: Option<String>) -> anyhow::Result<()> {
     drop(_lock);
 
     eprintln!("on branch: {selected_branch}");
-    let exit_code = shell::spawn_subshell(&wt_path)?;
 
-    // On exit, return worktree to clean detached state on default branch
-    let default = git::default_branch(&repo_root_path)?;
-    let ref_name = git::branch_ref(&repo_root_path, &default)?;
-
-    let should_reset = if git::is_dirty(&wt_path).unwrap_or(false) {
-        prompt::confirm("worktree has uncommitted changes. return it anyway?", false)
-            .unwrap_or(true)
+    // If interactive TTY, open subshell. Otherwise, print path.
+    if std::io::stdin().is_terminal() {
+        let exit_code = shell::spawn_subshell(&tree_path)?;
+        std::process::exit(exit_code);
     } else {
-        true
-    };
-
-    if should_reset && let Err(e) = git::reset_worktree(&wt_path, &ref_name) {
-        eprintln!("warning: failed to reset worktree: {e}");
+        println!("{}", tree_path.display());
     }
 
-    std::process::exit(exit_code);
+    Ok(())
 }
 
 fn cmd_status() -> anyhow::Result<()> {
@@ -240,7 +255,7 @@ fn cmd_return(path: Option<String>, force: bool) -> anyhow::Result<()> {
     // Reset to clean state
     let branch = git::default_branch(&repo_root_path)?;
     let ref_name = git::branch_ref(&repo_root_path, &branch)?;
-    git::reset_worktree(&wt_path, &ref_name)?;
+    git::reset_tree(&wt_path, &ref_name)?;
     eprintln!("returned {}", display::pretty_path(&wt_path));
     Ok(())
 }
