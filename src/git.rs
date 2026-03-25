@@ -124,34 +124,10 @@ pub fn branch_ref(repo_root: &Path, branch: &str) -> Result<String> {
     }
 }
 
-pub fn worktree_remove(repo_root: &Path, worktree_path: &Path) -> Result<()> {
-    let path_str = worktree_path.to_str().context("invalid worktree path")?;
-    run_git(repo_root, &["worktree", "remove", "--force", path_str])?;
-    Ok(())
-}
-
 pub fn reset_tree(tree_path: &Path, ref_name: &str) -> Result<()> {
     run_git(tree_path, &["checkout", "--detach", ref_name])?;
     run_git(tree_path, &["reset", "--hard"])?;
     run_git(tree_path, &["clean", "-fd"])?;
-    Ok(())
-}
-
-/// Create a worktree with a new branch.
-pub fn worktree_add_new_branch(repo_root: &Path, worktree_path: &Path, branch: &str) -> Result<()> {
-    let path_str = worktree_path.to_str().context("invalid worktree path")?;
-    run_git(repo_root, &["worktree", "add", "-b", branch, path_str])?;
-    Ok(())
-}
-
-/// Create a worktree checking out an existing branch.
-pub fn worktree_add_existing_branch(
-    repo_root: &Path,
-    worktree_path: &Path,
-    branch: &str,
-) -> Result<()> {
-    let path_str = worktree_path.to_str().context("invalid worktree path")?;
-    run_git(repo_root, &["worktree", "add", path_str, branch])?;
     Ok(())
 }
 
@@ -200,21 +176,6 @@ pub fn list_branches_by_date(repo_root: &Path) -> Result<Vec<String>> {
         let name = line.strip_prefix("origin/").unwrap_or(line);
         if seen.insert(name.to_string()) {
             branches.push(name.to_string());
-        }
-    }
-
-    Ok(branches)
-}
-
-/// Return the set of branch names currently checked out in the main repo
-/// and all its worktrees.
-pub fn checked_out_branches(repo_root: &Path) -> Result<std::collections::HashSet<String>> {
-    let output = run_git(repo_root, &["worktree", "list", "--porcelain"])?;
-    let mut branches = std::collections::HashSet::new();
-
-    for line in output.lines() {
-        if let Some(branch) = line.strip_prefix("branch refs/heads/") {
-            branches.insert(branch.to_string());
         }
     }
 
@@ -393,13 +354,6 @@ mod tests {
     }
 
     #[test]
-    fn test_checked_out_branches_includes_head() {
-        let dir = setup_test_repo();
-        let branches = checked_out_branches(dir.path()).unwrap();
-        assert!(!branches.is_empty());
-    }
-
-    #[test]
     fn test_current_branch_detached() {
         let dir = setup_test_repo();
         Command::new("git")
@@ -416,41 +370,6 @@ mod tests {
         let dir = setup_test_repo();
         let branch = current_branch(dir.path()).unwrap();
         assert!(branch.is_some());
-    }
-
-    #[test]
-    fn test_worktree_add_new_branch() {
-        let dir = setup_test_repo();
-        let wt_dir = tempfile::tempdir().unwrap();
-        let wt_path = wt_dir.path().join("wt");
-        worktree_add_new_branch(dir.path(), &wt_path, "feature/test").unwrap();
-        assert!(wt_path.exists());
-        let branch = current_branch(&wt_path).unwrap();
-        assert_eq!(branch, Some("feature/test".to_string()));
-    }
-
-    #[test]
-    fn test_worktree_add_existing_branch() {
-        let dir = setup_test_repo();
-        // Create a branch first
-        Command::new("git")
-            .args(["branch", "existing-branch"])
-            .current_dir(dir.path())
-            .output()
-            .unwrap();
-        // Detach HEAD so the branch is free
-        Command::new("git")
-            .args(["checkout", "--detach"])
-            .current_dir(dir.path())
-            .output()
-            .unwrap();
-
-        let wt_dir = tempfile::tempdir().unwrap();
-        let wt_path = wt_dir.path().join("wt");
-        worktree_add_existing_branch(dir.path(), &wt_path, "existing-branch").unwrap();
-        assert!(wt_path.exists());
-        let branch = current_branch(&wt_path).unwrap();
-        assert_eq!(branch, Some("existing-branch".to_string()));
     }
 
     #[test]
