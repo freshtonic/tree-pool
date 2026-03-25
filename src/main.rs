@@ -227,8 +227,8 @@ fn cmd_return(path: Option<String>, force: bool) -> anyhow::Result<()> {
     let config = config::Config::load(&repo_root_path)?;
     let pool_dir = pool::resolve_pool_dir(&repo_root_path, &config)?;
 
-    // Resolve the worktree path
-    let wt_path = if let Some(p) = path {
+    // Resolve the tree path
+    let tree_path = if let Some(p) = path {
         PathBuf::from(p).canonicalize()?
     } else if let Ok(env_path) = std::env::var("TREE_POOL_DIR") {
         PathBuf::from(env_path).canonicalize()?
@@ -239,24 +239,30 @@ fn cmd_return(path: Option<String>, force: bool) -> anyhow::Result<()> {
     let _lock = state::State::lock(&pool_dir)?;
     let st = state::State::load(&pool_dir)?;
 
-    // Validate this is a known worktree
-    if st.find_by_path(&wt_path).is_none() {
-        anyhow::bail!("{} is not a tree-pool worktree", wt_path.display());
+    if st.find_by_path(&tree_path).is_none() {
+        anyhow::bail!("{} is not a tree-pool tree", tree_path.display());
     }
 
-    // Check dirty
-    if git::is_dirty(&wt_path)?
-        && !force
-        && !prompt::confirm("worktree has uncommitted changes. return it anyway?", false)?
-    {
-        return Ok(());
+    if !force {
+        // Check dirty
+        if git::is_dirty(&tree_path)? {
+            anyhow::bail!("tree has uncommitted changes — commit or discard them, or use --force");
+        }
+
+        // Check for unpushed branches
+        let unpushed = git::unpushed_branches(&tree_path)?;
+        if !unpushed.is_empty() {
+            anyhow::bail!(
+                "tree has unpushed branches: {} — push them or use --force",
+                unpushed.join(", ")
+            );
+        }
     }
 
     // Reset to clean state
-    let branch = git::default_branch(&repo_root_path)?;
-    let ref_name = git::branch_ref(&repo_root_path, &branch)?;
-    git::reset_tree(&wt_path, &ref_name)?;
-    eprintln!("returned {}", display::pretty_path(&wt_path));
+    let default = git::default_branch(&tree_path)?;
+    git::reset_tree(&tree_path, &format!("refs/heads/{default}"))?;
+    eprintln!("returned {}", display::pretty_path(&tree_path));
     Ok(())
 }
 
@@ -272,77 +278,95 @@ fn cmd_destroy(path: Option<String>, force: bool, all: bool) -> anyhow::Result<(
 
     if all {
         if st.trees.is_empty() {
-            eprintln!("no worktrees to destroy");
+            eprintln!("no trees to destroy");
             return Ok(());
         }
 
-        if !force && !prompt::confirm(&format!("destroy all {} worktrees?", st.trees.len()), false)?
+        if !force
+            && !prompt::confirm(
+                &format!("destroy all {} trees?", st.trees.len()),
+                false,
+            )?
         {
             return Ok(());
         }
 
-        let paths: Vec<_> = st.trees.iter().map(|wt| wt.path.clone()).collect();
-        for wt_path in &paths {
-            if !force && process::is_in_use(wt_path) {
+        let paths: Vec<_> = st.trees.iter().map(|t| t.path.clone()).collect();
+        for tree_path in &paths {
+            if !force && process::is_in_use(tree_path) {
                 eprintln!(
                     "skipping {} (in use) — use --force to override",
-                    display::pretty_path(wt_path)
+                    display::pretty_path(tree_path)
                 );
                 continue;
             }
-            destroy_worktree(&repo_root_path, &pool_dir, wt_path, &mut st)?;
+            if let Err(e) = destroy_tree(tree_path, &mut st, force) {
+                eprintln!("warning: {e}");
+                continue;
+            }
         }
     } else {
         let path = path.context("path argument is required (or use --all)")?;
-        let wt_path = PathBuf::from(&path).canonicalize()?;
+        let tree_path = PathBuf::from(&path).canonicalize()?;
 
-        if st.find_by_path(&wt_path).is_none() {
-            anyhow::bail!("{} is not a tree-pool worktree", wt_path.display());
+        if st.find_by_path(&tree_path).is_none() {
+            anyhow::bail!("{} is not a tree-pool tree", tree_path.display());
         }
 
         if !force {
-            if process::is_in_use(&wt_path) {
+            if process::is_in_use(&tree_path) {
                 anyhow::bail!(
                     "{} is in use — use --force to override",
-                    display::pretty_path(&wt_path)
+                    display::pretty_path(&tree_path)
                 );
             }
 
             if !prompt::confirm(
-                &format!("destroy worktree {}?", display::pretty_path(&wt_path)),
+                &format!("destroy tree {}?", display::pretty_path(&tree_path)),
                 false,
             )? {
                 return Ok(());
             }
         }
 
-        destroy_worktree(&repo_root_path, &pool_dir, &wt_path, &mut st)?;
+        destroy_tree(&tree_path, &mut st, force)?;
     }
 
     st.save(&pool_dir)?;
     Ok(())
 }
 
-fn destroy_worktree(
-    repo_root: &Path,
-    _pool_dir: &Path,
-    wt_path: &Path,
+fn destroy_tree(
+    tree_path: &Path,
     st: &mut state::State,
+    force: bool,
 ) -> anyhow::Result<()> {
-    // Remove git worktree
-    if let Err(e) = git::worktree_remove(repo_root, wt_path) {
-        eprintln!("warning: failed to remove git worktree: {e}");
+    if !force {
+        if git::is_dirty(tree_path)? {
+            anyhow::bail!(
+                "{} has uncommitted changes — use --force to override",
+                display::pretty_path(tree_path)
+            );
+        }
+        let unpushed = git::unpushed_branches(tree_path)?;
+        if !unpushed.is_empty() {
+            anyhow::bail!(
+                "{} has unpushed branches: {} — use --force to override",
+                display::pretty_path(tree_path),
+                unpushed.join(", ")
+            );
+        }
     }
 
     // Remove the numbered parent directory (e.g., <poolDir>/1/)
-    if let Some(parent) = wt_path.parent()
-        && let Err(e) = std::fs::remove_dir_all(parent)
-    {
-        eprintln!("warning: failed to remove directory: {e}");
+    if let Some(parent) = tree_path.parent() {
+        if let Err(e) = std::fs::remove_dir_all(parent) {
+            eprintln!("warning: failed to remove directory: {e}");
+        }
     }
 
-    st.remove_by_path(wt_path);
-    eprintln!("destroyed {}", display::pretty_path(wt_path));
+    st.remove_by_path(tree_path);
+    eprintln!("destroyed {}", display::pretty_path(tree_path));
     Ok(())
 }
 
