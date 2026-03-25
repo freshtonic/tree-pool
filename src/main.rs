@@ -56,9 +56,9 @@ fn cmd_get(branch: Option<String>) -> anyhow::Result<()> {
     }
 
     // Fetch before branch selection so the list is up to date
-    if git::has_origin(&repo_root_path)? {
+    if git::has_remote(&repo_root_path, "origin")? {
         eprintln!("fetching origin...");
-        if let Err(e) = git::fetch_origin(&repo_root_path) {
+        if let Err(e) = git::fetch_remote(&repo_root_path, "origin") {
             eprintln!("warning: failed to fetch origin: {e}");
         }
     }

@@ -80,7 +80,7 @@ impl Config {
         let mut content = toml::to_string_pretty(&config).unwrap_or_default();
         content.push_str("\n# root = \"\"  # Base directory for the tree pool.\n");
         content.push_str("# Relative paths are relative to the repo root.\n");
-        content.push_str("# Supports environment variables, e.g. \"$HOME/worktrees\".\n");
+        content.push_str("# Supports environment variables, e.g. \"$HOME/trees\".\n");
         content.push_str("# Default: home directory (~/.tree-pool/)\n");
         content
     }

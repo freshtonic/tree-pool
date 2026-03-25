@@ -38,8 +38,8 @@ pub fn repo_root(dir: &Path) -> Result<String> {
     run_git(dir, &["rev-parse", "--show-toplevel"])
 }
 
-pub fn is_dirty(worktree_path: &Path) -> Result<bool> {
-    let output = run_git(worktree_path, &["status", "--porcelain"])?;
+pub fn is_dirty(repo: &Path) -> Result<bool> {
+    let output = run_git(repo, &["status", "--porcelain"])?;
     Ok(!output.is_empty())
 }
 
@@ -69,21 +69,11 @@ pub fn default_branch(repo_root: &Path) -> Result<String> {
 }
 
 pub fn remote_url(repo_root: &Path) -> Result<Option<String>> {
-    if !has_origin(repo_root)? {
+    if !has_remote(repo_root, "origin")? {
         return Ok(None);
     }
     let url = run_git(repo_root, &["remote", "get-url", "origin"])?;
     Ok(Some(url))
-}
-
-pub fn has_origin(repo_root: &Path) -> Result<bool> {
-    let remotes = run_git(repo_root, &["remote"])?;
-    Ok(remotes.lines().any(|r| r == "origin"))
-}
-
-pub fn fetch_origin(repo_root: &Path) -> Result<()> {
-    run_git(repo_root, &["fetch", "origin"])?;
-    Ok(())
 }
 
 /// Determine the best ref for the given branch, comparing local vs remote.
@@ -132,14 +122,14 @@ pub fn reset_tree(tree_path: &Path, ref_name: &str) -> Result<()> {
 }
 
 /// Create a new branch and check it out.
-pub fn create_and_checkout_branch(worktree_path: &Path, branch: &str) -> Result<()> {
-    run_git(worktree_path, &["checkout", "-b", branch])?;
+pub fn create_and_checkout_branch(repo: &Path, branch: &str) -> Result<()> {
+    run_git(repo, &["checkout", "-b", branch])?;
     Ok(())
 }
 
 /// Check out an existing branch.
-pub fn checkout_branch(worktree_path: &Path, branch: &str) -> Result<()> {
-    run_git(worktree_path, &["checkout", branch])?;
+pub fn checkout_branch(repo: &Path, branch: &str) -> Result<()> {
+    run_git(repo, &["checkout", branch])?;
     Ok(())
 }
 
@@ -182,9 +172,9 @@ pub fn list_branches_by_date(repo_root: &Path) -> Result<Vec<String>> {
     Ok(branches)
 }
 
-/// Return the current branch name for a worktree, or None if detached.
-pub fn current_branch(worktree_path: &Path) -> Result<Option<String>> {
-    let output = run_git(worktree_path, &["rev-parse", "--abbrev-ref", "HEAD"])?;
+/// Return the current branch name for a tree, or None if detached.
+pub fn current_branch(repo: &Path) -> Result<Option<String>> {
+    let output = run_git(repo, &["rev-parse", "--abbrev-ref", "HEAD"])?;
     if output == "HEAD" {
         Ok(None)
     } else {
@@ -230,6 +220,7 @@ pub fn fetch_remote(repo: &Path, remote: &str) -> Result<()> {
 /// on any remote, or are ahead of all remotes.
 pub fn unpushed_branches(repo: &Path) -> Result<Vec<String>> {
     let output = run_git(repo, &["branch", "--format=%(refname:short)"])?;
+    let remotes_output = run_git(repo, &["remote"])?;
     let mut unpushed = Vec::new();
 
     for branch in output.lines() {
@@ -239,7 +230,6 @@ pub fn unpushed_branches(repo: &Path) -> Result<Vec<String>> {
         }
 
         // Check if any remote has this branch at the same or newer commit
-        let remotes_output = run_git(repo, &["remote"])?;
         let mut pushed = false;
 
         for remote in remotes_output.lines() {

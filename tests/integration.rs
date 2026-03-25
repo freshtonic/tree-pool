@@ -115,9 +115,7 @@ fn get_creates_clone_with_remotes() {
     );
 
     // stdout should contain the clone path
-    let clone_path_str = String::from_utf8_lossy(&output.stdout)
-        .trim()
-        .to_string();
+    let clone_path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let clone_path = std::path::Path::new(&clone_path_str);
     assert!(
         clone_path.join(".git").exists(),

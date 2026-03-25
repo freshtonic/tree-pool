@@ -3,15 +3,15 @@ use std::process::Command;
 
 use anyhow::{Context, Result};
 
-/// Spawn a subshell in the given worktree directory.
+/// Spawn a subshell in the given tree directory.
 /// Sets TREE_POOL_DIR in the environment.
 /// Returns the shell's exit code.
-pub fn spawn_subshell(worktree_path: &Path) -> Result<i32> {
+pub fn spawn_subshell(tree_path: &Path) -> Result<i32> {
     let shell = resolve_shell();
 
     let mut child = Command::new(&shell)
-        .current_dir(worktree_path)
-        .env("TREE_POOL_DIR", worktree_path)
+        .current_dir(tree_path)
+        .env("TREE_POOL_DIR", tree_path)
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
