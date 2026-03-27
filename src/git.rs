@@ -117,7 +117,6 @@ pub fn branch_ref(repo_root: &Path, branch: &str) -> Result<String> {
 pub fn reset_tree(tree_path: &Path, ref_name: &str) -> Result<()> {
     run_git(tree_path, &["checkout", "--detach", ref_name])?;
     run_git(tree_path, &["reset", "--hard"])?;
-    run_git(tree_path, &["clean", "-fd"])?;
     Ok(())
 }
 
@@ -439,7 +438,7 @@ mod tests {
         std::fs::write(dir.path().join("extra.txt"), "dirty").unwrap();
         run_git(dir.path(), &["add", "."]).unwrap();
         run_git(dir.path(), &["commit", "-m", "dirty commit"]).unwrap();
-        // Also leave an untracked file
+        // Also leave an untracked file (simulates build artifacts, etc.)
         std::fs::write(dir.path().join("untracked.txt"), "junk").unwrap();
 
         // Reset to default branch ref
@@ -451,10 +450,10 @@ mod tests {
         let branch = current_branch(dir.path()).unwrap();
         assert!(branch.is_none(), "expected detached HEAD after reset_tree");
 
-        // Untracked file should be cleaned
+        // Untracked files should be preserved (build artifacts like target/)
         assert!(
-            !dir.path().join("untracked.txt").exists(),
-            "untracked file should be removed by reset_tree"
+            dir.path().join("untracked.txt").exists(),
+            "untracked files should be preserved by reset_tree"
         );
     }
 
