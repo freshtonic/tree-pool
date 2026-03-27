@@ -464,6 +464,8 @@ mod tests {
         let dest_dir = tempfile::tempdir().unwrap();
         let dest = dest_dir.path().join("clone");
         clone_local(source.path(), &dest).unwrap();
+        run_git(&dest, &["config", "user.email", "test@test.com"]).unwrap();
+        run_git(&dest, &["config", "user.name", "Test"]).unwrap();
         // Create a new branch with a commit
         run_git(&dest, &["checkout", "-b", "feature/new"]).unwrap();
         std::fs::write(dest.join("new.txt"), "content").unwrap();
