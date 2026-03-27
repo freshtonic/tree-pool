@@ -89,7 +89,7 @@ The most complex command:
 7. Load state
 8. Try to reuse available tree (not in-use AND not dirty):
    - Fetch from `local` and `origin` remotes to refresh
-   - Reset to clean state, checkout requested branch
+   - Reset tracked files to clean state (untracked files like build artifacts are preserved), checkout requested branch
 9. If no available tree and under max_trees: create new clone:
    - `git clone --local` (hardlinks .git/objects)
    - Rename `origin` remote to `local`
@@ -106,7 +106,7 @@ For each tree: detect processes with cwd inside tree path (via sysinfo), check d
 
 ### cmd_return() -- Reset Tree
 
-Resolve tree path (from argument, `TREE_POOL_DIR` env var, or cwd). Validate no dirty state or unpushed branches (unless `--force`). Reset to clean detached state on default branch. Tree stays in state for reuse.
+Resolve tree path (from argument, `TREE_POOL_DIR` env var, or cwd). Validate no dirty state or unpushed branches (unless `--force`). Reset tracked files to detached state on default branch (untracked files like build artifacts are preserved). Tree stays in state for reuse.
 
 ### cmd_destroy() -- Delete Tree
 

@@ -31,7 +31,7 @@ Commands are routed in `main.rs` via clap (`cli.rs`). Each `cmd_*` function orch
 
 **Git operations** (`git.rs`): All git interaction shells out to the `git` binary (no libgit2). Functions are layered: `run_git`/`run_git_ok` at the bottom, then predicates (`is_dirty`, `branch_exists`), then high-level operations (`clone_local`, `reset_tree`, `unpushed_branches`).
 
-**Tree lifecycle**: `cmd_get` either reuses an idle tree (not in-use, not dirty) by resetting it, or creates a new clone. It then `exec`s (not spawns) a shell — `tp` replaces itself with the subshell process. `cmd_return` validates no dirty state or unpushed branches (unless `--force`), then resets the tree for reuse. `cmd_destroy` does the same checks then `rm -rf`s the tree.
+**Tree lifecycle**: `cmd_get` either reuses an idle tree (not in-use, not dirty) by resetting it, or creates a new clone. It then `exec`s (not spawns) a shell — `tp` replaces itself with the subshell process. `cmd_return` validates no dirty state or unpushed branches (unless `--force`), then resets the tree for reuse. `cmd_destroy` does the same checks then `rm -rf`s the tree. Resets only affect tracked files — untracked files (build artifacts like `target/`, `node_modules/`) are preserved so trees stay "pre-warmed".
 
 **Two-remote model**: Clones always have a `local` remote (source repo path) and optionally an `origin` remote (real upstream URL copied from source). Operations gracefully handle missing origin.
 
