@@ -2,7 +2,7 @@
 
 A CLI tool (`tp`) for managing pools of reusable, pre-warmed local git clones for parallel AI coding agent workflows.
 
-![tree-pool demo](demo.gif)
+![tree-pool demo](demo.webp)
 
 ## Install
 
