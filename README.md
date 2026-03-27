@@ -2,6 +2,8 @@
 
 A CLI tool (`tp`) for managing pools of reusable, pre-warmed local git clones for parallel AI coding agent workflows.
 
+![tree-pool demo](demo.gif)
+
 ## Install
 
 ```
@@ -105,3 +107,5 @@ Because clones are fully independent repositories, multiple trees can have the s
 ## Credits
 
 This project is a Rust port of [treehouse](https://github.com/kunchenguid/treehouse) by [kunchenguid](https://github.com/kunchenguid).
+
+The command surface is roughly equivalent but while `treehouse` manages pools of git worktrees, `tree-pool` manages pools of local git clones.
