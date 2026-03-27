@@ -69,7 +69,10 @@ jobs:
       - name: Check for artifact-relevant changes since last release
         id: filter
         run: |
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          # Find the latest semver release tag (v1.2.3 or tree-pool-v1.2.3)
+          LAST_TAG=$(git tag --list --sort=-v:refname \
+            | grep -E '^(v|tree-pool-v)[0-9]+\.[0-9]+\.[0-9]+' \
+            | head -1)
           if [ -z "$LAST_TAG" ]; then
             # No tags yet — compare against root (all commits are new)
             CHANGED=$(git diff --name-only "$(git rev-list --max-parents=0 HEAD)" HEAD)
