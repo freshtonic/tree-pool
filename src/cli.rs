@@ -14,13 +14,15 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Create tree-pool.toml in the repo root
+    Init,
+    /// Show pool status
+    Status,
     /// Acquire a tree from the pool
     Get {
         /// Branch to check out in the tree
         branch: Option<String>,
     },
-    /// Show pool status
-    Status,
     /// Return a tree to the pool
     Return {
         /// Path to the tree to return
@@ -40,8 +42,6 @@ pub enum Command {
         #[arg(long)]
         all: bool,
     },
-    /// Create tree-pool.toml in the repo root
-    Init,
     /// Update tree-pool via cargo install
     Update,
 }

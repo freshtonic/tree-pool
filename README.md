@@ -11,13 +11,13 @@ cargo install tree-pool
 ## Usage
 
 ```bash
+tp init               # Create tree-pool.toml in repo root
+tp status             # Show pool status (includes branch names)
 tp                    # Acquire a tree (prompts for branch)
 tp get                # Same as above
 tp get <branch>       # Acquire a tree on a specific branch
-tp status             # Show pool status (includes branch names)
 tp return             # Return a tree to the pool
 tp destroy            # Remove a tree permanently
-tp init               # Create tree-pool.toml in repo root
 tp update             # Update tree-pool via cargo install
 ```
 
