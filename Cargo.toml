@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 description = "A CLI tool (`tp`) for managing pools of reusable, pre-warmed local git clones for parallel AI coding agent workflows."
 license = "MIT"
-repository = "https://github.com/jamessadler/tree-pool"
+repository = "https://github.com/freshtonic/tree-pool"
 
 [[bin]]
 name = "tp"
