@@ -155,8 +155,8 @@ fn cmd_get(branch: Option<String>) -> anyhow::Result<()> {
 
     // If interactive TTY, open subshell. Otherwise, print path.
     if std::io::stdin().is_terminal() {
-        let exit_code = shell::spawn_subshell(&tree_path)?;
-        std::process::exit(exit_code);
+        shell::exec_subshell(&tree_path)?;
+        // exec_subshell replaces this process; we only reach here on error
     } else {
         println!("{}", tree_path.display());
     }
