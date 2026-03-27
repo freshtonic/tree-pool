@@ -12,7 +12,7 @@ jobs:
   release-plz-release:
     name: Release-plz release
     runs-on: ubuntu-latest
-    if: ${{ github.repository_owner == 'freshtonic' && github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.repository_owner == 'freshtonic' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
     permissions:
       contents: write
       pull-requests: read
@@ -36,7 +36,7 @@ jobs:
   release-plz-pr:
     name: Release-plz PR
     runs-on: ubuntu-latest
-    if: ${{ github.repository_owner == 'freshtonic' && github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.repository_owner == 'freshtonic' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
     permissions:
       contents: write
       pull-requests: write
