@@ -8,11 +8,33 @@ on:
 
 jobs:
 
-  # Release unpublished packages.
+  # Check if the commit came from a merged release-plz PR.
+  check-release-pr:
+    name: Check for merged release PR
+    runs-on: ubuntu-latest
+    if: ${{ github.repository_owner == 'freshtonic' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
+    outputs:
+      is_release: ${{ steps.check.outputs.is_release }}
+    steps:
+      - name: Check if commit is from a release-plz PR
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHA=${{ github.event.workflow_run.head_sha }}
+          BRANCH=$(gh api repos/${{ github.repository }}/commits/$SHA/pulls --jq '.[0].head.ref // ""')
+          if [[ "$BRANCH" == release-plz-* ]]; then
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Release unpublished packages (only after a release PR is merged).
   release-plz-release:
     name: Release-plz release
     runs-on: ubuntu-latest
-    if: ${{ github.repository_owner == 'freshtonic' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
+    needs: check-release-pr
+    if: ${{ needs.check-release-pr.outputs.is_release == 'true' }}
     permissions:
       contents: write
       pull-requests: read
