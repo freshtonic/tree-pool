@@ -6,7 +6,6 @@ use clap::{Parser, Subcommand};
     version = concat!("tree-pool ", env!("CARGO_PKG_VERSION")),
     about = "Manage a pool of reusable local git clones"
 )]
-#[command(disable_help_subcommand = true)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Command>,
