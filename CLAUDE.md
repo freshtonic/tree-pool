@@ -23,6 +23,8 @@ All three checks (fmt, clippy, test) must pass before committing. CI enforces th
 
 ## Architecture
 
+Main document: [ARCHITECTURE.md](ARCHITECTURE.md).
+
 Commands are routed in `main.rs` via clap (`cli.rs`). Each `cmd_*` function orchestrates config, state, and git operations.
 
 **State management** (`state.rs`): Pool state lives in `<pool_dir>/.meta/tree-pool-state.json` with file-based locking (`fs2`). State self-heals on load by pruning entries whose paths no longer exist. The lock is held only during state mutation — dropped before spawning subshells.
@@ -42,6 +44,10 @@ Commands are routed in `main.rs` via clap (`cli.rs`). Each `cmd_*` function orch
 - `anyhow::Result` with `.context()` throughout — no panics in command code
 - Unit tests are colocated in each module; integration tests in `tests/integration.rs`
 - Test repos use `tempfile::tempdir()` for isolation
+
+## Documentation
+
+Consolidate project knowledge by keeping CLAUDE.md (this doc), ARCHITECTURE.md, README.md & DEVELOPMENT.md up to date whenever a change is noteworthy enough to warrant a documentation revision.
 
 ## Demo recording
 
