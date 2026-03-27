@@ -104,6 +104,15 @@ Each tree in the pool is a local git clone created with `git clone --local`, whi
 
 Because clones are fully independent repositories, multiple trees can have the same branch checked out simultaneously, and filesystem sandboxing is straightforward.
 
+### Pre-warmed
+
+Every tree in the pool is ready for immediate use. When `tp get` hands you a tree it has already:
+
+- Fetched the latest state from the `local` and `origin` remotes
+- Reset the working tree to a clean state
+
+Build artifacts (e.g. Rust's `target/` directory, `node_modules/`, Python virtualenvs) persist across reuses. Cargo's incremental compilation means that reusing a tree typically requires only a partial rebuild of changed crates rather than a full compile from scratch.
+
 ## Credits
 
 This project is a Rust port of [treehouse](https://github.com/kunchenguid/treehouse) by [kunchenguid](https://github.com/kunchenguid).
