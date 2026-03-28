@@ -1,4 +1,7 @@
 use clap::{Parser, Subcommand};
+use clap_complete::engine::{ArgValueCandidates, ArgValueCompleter};
+
+use crate::completions;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -20,11 +23,13 @@ pub enum Command {
     /// Acquire a tree from the pool
     Get {
         /// Branch to check out in the tree
+        #[arg(add = ArgValueCompleter::new(completions::branch_completer))]
         branch: Option<String>,
     },
     /// Return a tree to the pool
     Return {
         /// Path to the tree to return
+        #[arg(add = ArgValueCandidates::new(completions::tree_path_candidates))]
         path: Option<String>,
         /// Skip dirty-check prompt
         #[arg(long)]
@@ -33,6 +38,7 @@ pub enum Command {
     /// Remove a tree from the pool permanently
     Destroy {
         /// Path to the tree to destroy
+        #[arg(add = ArgValueCandidates::new(completions::tree_path_candidates))]
         path: Option<String>,
         /// Force destroy even if dirty or has unpushed branches
         #[arg(long)]
@@ -43,6 +49,11 @@ pub enum Command {
     },
     /// Update tree-pool via cargo install
     Update,
+    /// Generate shell completion scripts
+    Completions {
+        /// Shell to generate completions for
+        shell: clap_complete::aot::Shell,
+    },
 }
 
 #[cfg(test)]
@@ -117,5 +128,11 @@ mod tests {
         assert!(result.is_err()); // clap exits on --version
         let err = result.unwrap_err();
         assert_eq!(err.kind(), clap::error::ErrorKind::DisplayVersion);
+    }
+
+    #[test]
+    fn completions_subcommand() {
+        let cli = Cli::parse_from(["tp", "completions", "bash"]);
+        assert!(matches!(cli.command, Some(Command::Completions { .. })));
     }
 }

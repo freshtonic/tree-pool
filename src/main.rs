@@ -1,5 +1,6 @@
 mod branch;
 mod cli;
+mod completions;
 mod config;
 mod display;
 mod git;
@@ -13,10 +14,12 @@ mod state;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use cli::{Cli, Command};
 
 fn main() {
+    clap_complete::CompleteEnv::with_factory(Cli::command).complete();
+
     let cli = Cli::parse();
 
     let result = match cli.command {
@@ -27,6 +30,7 @@ fn main() {
         Some(Command::Destroy { path, force, all }) => cmd_destroy(path, force, all),
         Some(Command::Init) => cmd_init(),
         Some(Command::Update) => cmd_update(),
+        Some(Command::Completions { shell }) => cmd_completions(shell),
     };
 
     if let Err(e) = result {
@@ -389,5 +393,10 @@ fn cmd_update() -> anyhow::Result<()> {
         anyhow::bail!("cargo install tree-pool failed");
     }
 
+    Ok(())
+}
+
+fn cmd_completions(shell: clap_complete::aot::Shell) -> anyhow::Result<()> {
+    clap_complete::aot::generate(shell, &mut Cli::command(), "tp", &mut std::io::stdout());
     Ok(())
 }
